@@ -81,6 +81,12 @@ async function flushQueue() {
         await submitLancamentoValues(item.payload, accessToken);
       } else if (item.type === "estoque-novo") {
         await createEstoqueItem(item.payload, accessToken);
+      } else if (item.type === "fornecedor-novo") {
+        await createFornecedor(item.payload, accessToken);
+      } else if (item.type === "conta-pagar-novo") {
+        await createConta("pagar", item.payload, accessToken);
+      } else if (item.type === "conta-receber-novo") {
+        await createConta("receber", item.payload, accessToken);
       }
       removeFromQueue(item.id);
     } catch (err) {

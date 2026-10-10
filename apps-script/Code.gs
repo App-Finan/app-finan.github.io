@@ -42,9 +42,35 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-09-21-novo-link";
+const GATEWAY_VERSION = "2026-10-08-erp-fase1";
 
 const USUARIOS_TAB = "Usuários";
+// ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
+// a fixed, positional tab (like Usuários), NOT routed through the adaptive
+// esquema.js engine Lançamento/Estoque use — a smaller first step; "Conectar
+// planilha" does not yet offer it a custom tab name.
+const FORNECEDORES_TAB = "Fornecedores";
+const FORNECEDORES_HEADERS = ["Nome", "CNPJ/CPF", "Categoria", "Telefone", "E-mail", "Prazo de pagamento", "Observação", "Status"];
+// ERP, Fase 1 — Contas a Pagar / Contas a Receber. Same fixed-tab reasoning as
+// Fornecedores above. Columns: Descrição, Fornecedor/Cliente (free text —
+// separate from the Pessoa lookup; the "Pagar"/"Receber" action asks which
+// Pessoa it really was, since that write goes through Lançamento, which
+// requires one), Categoria, Valor, Vencimento (date serial), Status
+// ("Pendente" | "Pago"/"Recebido" — "Atrasado" is never stored, only computed
+// from Vencimento < hoje), Pago em / Recebido em (date serial, blank until
+// settled), Recorrente ("Sim"/"Não"), Observação, Avisado em (date serial of
+// the last reminder e-mail that covered this row, blank if never — dedupe key
+// for lembretesVencimento_, see below).
+const CONTAS_PAGAR_TAB = "Contas a Pagar";
+const CONTAS_RECEBER_TAB = "Contas a Receber";
+const CONTAS_HEADERS = {
+  [CONTAS_PAGAR_TAB]: ["Descrição", "Fornecedor", "Categoria", "Valor", "Vencimento", "Status", "Pago em", "Recorrente", "Observação", "Avisado em"],
+  [CONTAS_RECEBER_TAB]: ["Descrição", "Cliente", "Categoria", "Valor", "Vencimento", "Status", "Recebido em", "Recorrente", "Observação", "Avisado em"],
+};
+// Tab CREATION is Master-only (actionAddTab_); writing ROWS in an existing one
+// is Editor+Master (WRITE_TABS) — same split as Fornecedores, same reasoning
+// as Configuração: creating a tab is a structural change to the spreadsheet.
+const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB];
 const LOOKUP_TABS = ["Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
 const MAX_COMPANIES = 200;
 const REQUESTS_TAB = "Solicitações";
@@ -90,6 +116,9 @@ function companyTemplate_(segmento) {
   return [
     { name: "Lançamento", dateCols: [0], headers: ["Data", "Loja", "Conta", "Empresa", "Categoria", "Valor", "Tipo", qtd, "Pessoa", "Observação"], seeds: () => [] },
     { name: "Estoque", dateCols: [9, 10], headers: ["Produto", "Tipo", "Marca", "Condição", "Estado", qtdEstoque, esp, "Valor de Custo", "Valor de venda", "Data de Compra", "Data de Venda", "Comprador", "Vendedor", "Loja", "Vendido?", "Observação"], seeds: () => [] },
+    { name: FORNECEDORES_TAB, headers: FORNECEDORES_HEADERS, seeds: () => [] },
+    { name: CONTAS_PAGAR_TAB, headers: CONTAS_HEADERS[CONTAS_PAGAR_TAB], seeds: () => [] },
+    { name: CONTAS_RECEBER_TAB, headers: CONTAS_HEADERS[CONTAS_RECEBER_TAB], seeds: () => [] },
     { name: "Lojas", headers: LOOKUP_HEADERS, seeds: () => [seedRow_(1, "Loja principal")] },
     { name: "Contas", headers: LOOKUP_HEADERS, seeds: () => [seedRow_(1, "Caixa"), seedRow_(2, "Banco")] },
     { name: "Empresas", headers: LOOKUP_HEADERS, seeds: (empresa) => [seedRow_(1, empresa)] },
@@ -101,8 +130,8 @@ function companyTemplate_(segmento) {
     { name: "Usuários", headers: ["Email", "Nome", "Perfil"], seeds: () => [] },
   ];
 }
-const READ_TABS = ["Estoque", "Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
-const WRITE_TABS = ["Estoque"]; // plus the company's own ledger tab (sheetName)
+const READ_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, "Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
+const WRITE_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB]; // plus the company's own ledger tab (sheetName)
 const ROLE_VISUALIZADOR = "Visualizador";
 const ROLE_EDITOR = "Editor";
 const ROLE_MASTER = "Master";
@@ -529,6 +558,8 @@ function despachar_(body, deps, email, sessaoSenha) {
       return actionUpdateValues_(deps, email, access, spreadsheet, body);
     case "addTab":
       return actionAddTab_(deps, access, body);
+    case "verificarLembretes":
+      return actionVerificarLembretes_(deps, access, spreadsheet, body);
     default:
       throw new GatewayError_(400, "Ação desconhecida.");
   }
@@ -1029,16 +1060,127 @@ function canWriteUsuarios_(access, email, parsed, row) {
 }
 
 function actionAddTab_(deps, access, body) {
-  if (body.title !== USUARIOS_TAB && body.title !== CONFIG_TAB) throw denied_();
-  if (body.title === CONFIG_TAB) {
+  const erpTab = ERP_MASTER_ONLY_TABS.indexOf(body.title) !== -1;
+  if (body.title !== USUARIOS_TAB && body.title !== CONFIG_TAB && !erpTab) throw denied_();
+  if (body.title === CONFIG_TAB || erpTab) {
+    // Creating the tab is a structural change, kept Master-only even though
+    // Editor can write rows in it once it exists (every ERP_MASTER_ONLY_TABS
+    // entry is also in WRITE_TABS) — same reasoning as Configuração.
     if (access.perfil !== ROLE_MASTER) throw denied_();
   } else if (access.perfil !== ROLE_MASTER && !access.bootstrapOk) {
     throw denied_();
   }
   return deps.lock(() => {
     deps.sheets.addTab(body.spreadsheetId, body.title);
-    deps.cache.remove(body.title === USUARIOS_TAB ? "usr_" + body.spreadsheetId : "cfg_" + body.spreadsheetId);
+    if (body.title === USUARIOS_TAB) deps.cache.remove("usr_" + body.spreadsheetId);
+    else if (body.title === CONFIG_TAB) deps.cache.remove("cfg_" + body.spreadsheetId);
     return { created: true };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// ERP, Fase 1 — avisos de vencimento (Contas a Pagar / Contas a Receber).
+// Called once per login by the client (never on a timer: this app has no
+// background trigger installed) — so this is "checked whenever someone who
+// can act signs in," not a true any-time-of-day push. Deliberately dedupes
+// via each row's own "Avisado em" column (column J, index 9) rather than a
+// cache key, so it is correct even across logins from different people/devices
+// and survives the 20 s Usuários-style cache window with no special-casing.
+// ---------------------------------------------------------------------------
+
+const CONTAS_AVISO_DIAS_ANTES = 3;
+const LEMBRETE_COL = { DESCRICAO: 0, CONTRAPARTE: 1, VALOR: 3, VENCIMENTO: 4, STATUS: 5, AVISADO: 9 };
+
+function hojeSerial_(deps) {
+  const epoch = Date.UTC(1899, 11, 30);
+  return Math.floor((deps.now() - epoch) / 86400000);
+}
+
+function formatarDataSerial_(serial) {
+  const d = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+  const dia = ("0" + d.getUTCDate()).slice(-2);
+  const mes = ("0" + (d.getUTCMonth() + 1)).slice(-2);
+  return dia + "/" + mes + "/" + d.getUTCFullYear();
+}
+
+function formatarMoeda_(valor) {
+  return "R$ " + (Number(valor) || 0).toFixed(2).replace(".", ",");
+}
+
+function montarCorpoLembretes_(empresa, pendentes, hoje) {
+  function linhas(itens) {
+    return itens
+      .map((it) => {
+        const tag = it.vencimento < hoje ? "ATRASADA" : "vence em " + formatarDataSerial_(it.vencimento);
+        return "- " + it.descricao + " (" + it.contraparte + "), " + formatarMoeda_(it.valor) + " — " + tag;
+      })
+      .join("\n");
+  }
+  const partes = ["Olá!\n\nUm resumo das contas de " + empresa + " que precisam de atenção:\n"];
+  if (pendentes.pagar.length) partes.push("\nA PAGAR:\n" + linhas(pendentes.pagar));
+  if (pendentes.receber.length) partes.push("\nA RECEBER:\n" + linhas(pendentes.receber));
+  partes.push("\n\nEntre no Finan. para ver os detalhes.\n");
+  return partes.join("");
+}
+
+function actionVerificarLembretes_(deps, access, spreadsheet, body) {
+  // Only people who could actually act on the bill trigger (and receive) a
+  // check — a Visualizador reading Contas a Pagar does not spend mail quota.
+  if (access.perfil !== ROLE_EDITOR && access.perfil !== ROLE_MASTER) throw denied_();
+
+  const hoje = hojeSerial_(deps);
+  const limite = hoje + CONTAS_AVISO_DIAS_ANTES;
+  const pendentes = { pagar: [], receber: [] };
+
+  [CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB].forEach((tab) => {
+    let rows;
+    try {
+      rows = deps.sheets.getValues(body.spreadsheetId, "'" + tab + "'!A2:J", "UNFORMATTED_VALUE");
+    } catch (err) {
+      return; // tab not created yet on this company — nothing to check
+    }
+    rows.forEach((row, index) => {
+      if (!row[LEMBRETE_COL.DESCRICAO]) return;
+      const status = row[LEMBRETE_COL.STATUS] || "Pendente";
+      if (status !== "Pendente") return;
+      const vencimento = row[LEMBRETE_COL.VENCIMENTO];
+      if (typeof vencimento !== "number" || vencimento > limite) return;
+      const avisadoEm = row[LEMBRETE_COL.AVISADO];
+      if (typeof avisadoEm === "number" && avisadoEm >= hoje) return; // already covered by today's e-mail
+      const item = {
+        linha: index + 2,
+        descricao: String(row[LEMBRETE_COL.DESCRICAO]),
+        contraparte: String(row[LEMBRETE_COL.CONTRAPARTE] || ""),
+        valor: row[LEMBRETE_COL.VALOR],
+        vencimento: vencimento,
+      };
+      (tab === CONTAS_PAGAR_TAB ? pendentes.pagar : pendentes.receber).push(item);
+    });
+  });
+
+  const total = pendentes.pagar.length + pendentes.receber.length;
+  if (total === 0) return { avisados: 0 };
+
+  const destinatarios = (loadUsuarios_(deps, body.spreadsheetId) || []).filter(
+    (u) => u.perfil === ROLE_EDITOR || u.perfil === ROLE_MASTER
+  );
+  if (destinatarios.length > 0) {
+    const corpo = montarCorpoLembretes_(spreadsheet.empresa, pendentes, hoje);
+    destinatarios.forEach((u) => {
+      enviarEmailSeguro_(deps, u.email, total + " conta(s) para olhar — " + spreadsheet.empresa, corpo);
+    });
+  }
+
+  return deps.lock(() => {
+    [
+      { tab: CONTAS_PAGAR_TAB, itens: pendentes.pagar },
+      { tab: CONTAS_RECEBER_TAB, itens: pendentes.receber },
+    ].forEach((grupo) => {
+      grupo.itens.forEach((item) => {
+        deps.sheets.updateValues(body.spreadsheetId, "'" + grupo.tab + "'!J" + item.linha + ":J" + item.linha, [[hoje]]);
+      });
+    });
+    return { avisados: total };
   });
 }
 

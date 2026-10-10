@@ -228,6 +228,9 @@ async function resolveProfileAndEnter(tenant, token, email) {
   try {
     const usuario = await tentarVariasVezes(async () => {
       await ensureUsuariosSheet(token);
+      await ensureFornecedoresSheet(token);
+      await ensureContasSheet("pagar", token);
+      await ensureContasSheet("receber", token);
       return fetchUsuario(email, token);
     });
     if (usuario) {
@@ -285,6 +288,27 @@ async function refreshAllData() {
   } catch (err) {
     console.error(err);
     errors.push(`Estoque: ${err.message}`);
+  }
+
+  try {
+    await refreshFornecedores();
+  } catch (err) {
+    console.error(err);
+    errors.push(`Fornecedores: ${err.message}`);
+  }
+
+  try {
+    await refreshContas("pagar");
+  } catch (err) {
+    console.error(err);
+    errors.push(`Contas a Pagar: ${err.message}`);
+  }
+
+  try {
+    await refreshContas("receber");
+  } catch (err) {
+    console.error(err);
+    errors.push(`Contas a Receber: ${err.message}`);
   }
 
   if (isMaster(currentUserRole)) {
@@ -494,10 +518,13 @@ async function startApp(token, nome, perfil, linha) {
     console.error(err);
   }
 
-  const [lancResult, lookupsResult, estoqueResult] = await Promise.allSettled([
+  const [lancResult, lookupsResult, estoqueResult, fornecedoresResult, contasPagarResult, contasReceberResult] = await Promise.allSettled([
     fetchWithOfflineFallback(() => fetchLancamentos(token), "lancamentos", serializeLancamentos, deserializeLancamentos),
     fetchWithOfflineFallback(() => fetchAllLookups(token), "lookups", null, null),
     fetchWithOfflineFallback(() => fetchEstoque(token), "estoque", serializeEstoque, deserializeEstoque),
+    fetchWithOfflineFallback(() => fetchFornecedores(token), "fornecedores", null, null),
+    fetchWithOfflineFallback(() => fetchContas("pagar", token), "contas-pagar", null, null),
+    fetchWithOfflineFallback(() => fetchContas("receber", token), "contas-receber", null, null),
   ]);
 
   const errors = [];
@@ -506,6 +533,7 @@ async function startApp(token, nome, perfil, linha) {
   if (lancResult.status === "fulfilled") {
     initDashboard(lancResult.value.data);
     initLancamentoLista(lancResult.value.data);
+    setupRelatorio();
     if (lancResult.value.fromCache) anyFromCache = true;
   } else {
     console.error(lancResult.reason);
@@ -529,6 +557,43 @@ async function startApp(token, nome, perfil, linha) {
   } else if (estoqueResult.status === "rejected") {
     console.error(estoqueResult.reason);
     errors.push(`Estoque: ${estoqueResult.reason.message}`);
+  }
+
+  if (fornecedoresResult.status === "fulfilled") {
+    setupFornecedoresForm();
+    initFornecedoresList(fornecedoresResult.value.data);
+    if (fornecedoresResult.value.fromCache) anyFromCache = true;
+  } else {
+    console.error(fornecedoresResult.reason);
+    errors.push(`Fornecedores: ${fornecedoresResult.reason.message}`);
+  }
+
+  if (contasPagarResult.status === "fulfilled" && lookupsResult.status === "fulfilled") {
+    setupContaForm("pagar");
+    initContasList("pagar", contasPagarResult.value.data, lookupsResult.value.data);
+    if (contasPagarResult.value.fromCache) anyFromCache = true;
+  } else if (contasPagarResult.status === "rejected") {
+    console.error(contasPagarResult.reason);
+    errors.push(`Contas a Pagar: ${contasPagarResult.reason.message}`);
+  }
+
+  if (contasReceberResult.status === "fulfilled" && lookupsResult.status === "fulfilled") {
+    setupContaForm("receber");
+    initContasList("receber", contasReceberResult.value.data, lookupsResult.value.data);
+    if (contasReceberResult.value.fromCache) anyFromCache = true;
+  } else if (contasReceberResult.status === "rejected") {
+    console.error(contasReceberResult.reason);
+    errors.push(`Contas a Receber: ${contasReceberResult.reason.message}`);
+  }
+
+  // Avisos de vencimento (gateway mode only — sending e-mail needs Apps
+  // Script). Fire-and-forget: checked once per login for Editor/Master (the
+  // server re-checks the role too), deduped server-side by each conta's own
+  // "Avisado em" column, so logging in again the same day never double-mails.
+  if (CONFIG.GATEWAY_URL && canEdit(perfil)) {
+    gatewayCall("verificarLembretes", { spreadsheetId: CONFIG.SPREADSHEET_ID }, token).catch((err) => {
+      console.error("Avisos de vencimento:", err);
+    });
   }
 
   // Inputs for the sheet's own extra columns, from the layouts just detected.

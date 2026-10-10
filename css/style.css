@@ -1220,7 +1220,14 @@ td select {
   color: var(--color-text);
 }
 
-.filter-presets {
+/* .relatorio-presets shares this look (see js/relatorio.js) but is a distinct
+   class on purpose: js/dashboard.js's setupFilterHandlers binds a click
+   listener to every ".filter-presets button" in the WHOLE document, not just
+   the Dashboard's own — reusing that class on the Relatório view's preset row
+   would make clicking it silently rewrite the Dashboard's #filter-start/#filter-end
+   and re-render the Dashboard, a real bug found while building the report. */
+.filter-presets,
+.relatorio-presets {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
@@ -1230,7 +1237,8 @@ td select {
   background: var(--color-surface);
 }
 
-.filter-presets button {
+.filter-presets button,
+.relatorio-presets button {
   border: none;
   background: transparent;
   color: var(--color-muted);
@@ -1243,11 +1251,13 @@ td select {
   cursor: pointer;
 }
 
-.filter-presets button:hover {
+.filter-presets button:hover,
+.relatorio-presets button:hover {
   color: var(--color-text);
 }
 
-.filter-presets button.active {
+.filter-presets button.active,
+.relatorio-presets button.active {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   font-weight: 700;
@@ -1773,6 +1783,161 @@ td select {
   font-size: 0.82rem;
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+/* Fornecedores (ERP, Fase 1) — same visual pattern as .estoque-card/.estoque-*
+   above, cloned under its own class names since it's a different entity, not
+   a different style. */
+
+.fornecedor-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.6rem;
+}
+
+.fornecedor-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.12s ease;
+}
+
+.fornecedor-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.fornecedor-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fornecedor-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.fornecedor-meta {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  margin-top: 0.15rem;
+}
+
+.fornecedor-obs {
+  font-size: 0.8rem;
+  color: var(--color-subtle);
+  margin-top: 0.3rem;
+}
+
+.fornecedor-status {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.fornecedor-status-ativo {
+  background: color-mix(in srgb, var(--good-text) 15%, transparent);
+  color: var(--good-text);
+}
+
+.fornecedor-status-inativo {
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+
+.fornecedor-actions-host {
+  margin-top: 0.5rem;
+}
+
+.fornecedor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fornecedor-action-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.fornecedor-action-btn:hover {
+  border-color: var(--color-accent-text);
+}
+
+.fornecedor-inline-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fornecedor-inline-panel input {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.fornecedor-inline-panel select {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+/* Contas a Pagar / Contas a Receber (ERP, Fase 1) */
+
+/* A plain 3-across stat row — also reused by Relatório's three cards
+   (js/relatorio.js). Not .kpi-row: that one is a 12-column bento sized for
+   .stat-tile's own grid-column: span rules, which these plain .card stats
+   don't use. */
+.contas-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.conta-kpi-valor {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
+
+.conta-kpi-alerta {
+  color: var(--color-danger);
+}
+
+.conta-status-pendente {
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+
+.conta-status-atrasado {
+  background: var(--color-danger-wash);
+  color: var(--color-danger);
 }
 
 /* Lançamento form */
@@ -2533,7 +2698,8 @@ td select {
    blocks above, which were written for the previous look.
    -------------------------------------------------------------------------- */
 @media (max-width: 860px) {
-  .kpi-row {
+  .kpi-row,
+  .contas-kpi-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.6rem;
   }

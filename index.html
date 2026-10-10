@@ -339,6 +339,29 @@
           <button type="button" class="nav-item nav-subitem" data-view="estoque-form" data-vocab="novoItem">Nova peça</button>
         </div>
       </div>
+      <div class="nav-group">
+        <button type="button" class="nav-item nav-group-toggle" data-group="financeiro">
+          <span class="nav-label">Financeiro</span>
+          <span class="nav-caret">▾</span>
+        </button>
+        <div class="nav-submenu" id="submenu-financeiro" hidden>
+          <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-lista">Contas a Pagar</button>
+          <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-form">Nova conta a pagar</button>
+          <button type="button" class="nav-item nav-subitem" data-view="contas-receber-lista">Contas a Receber</button>
+          <button type="button" class="nav-item nav-subitem" data-view="contas-receber-form">Nova conta a receber</button>
+          <button type="button" class="nav-item nav-subitem" data-view="relatorio">Relatório</button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <button type="button" class="nav-item nav-group-toggle" data-group="compras">
+          <span class="nav-label">Compras</span>
+          <span class="nav-caret">▾</span>
+        </button>
+        <div class="nav-submenu" id="submenu-compras" hidden>
+          <button type="button" class="nav-item nav-subitem" data-view="fornecedores-lista">Fornecedores</button>
+          <button type="button" class="nav-item nav-subitem" data-view="fornecedores-form">Novo fornecedor</button>
+        </div>
+      </div>
       <button type="button" class="nav-item" data-view="ajustes">Ajustes</button>
     </nav>
     <div class="sidebar-footer">
@@ -634,6 +657,226 @@
         </form>
       </section>
 
+      <section class="view-section" data-view="fornecedores-lista" id="view-fornecedores-lista" hidden>
+        <section class="filters-row card">
+          <div class="filter-group">
+            <label for="fornecedores-filtro-categoria">Categoria</label>
+            <select id="fornecedores-filtro-categoria"></select>
+          </div>
+          <div class="filter-group filter-group-grow">
+            <label for="fornecedores-busca">Buscar</label>
+            <input type="text" id="fornecedores-busca" placeholder="Nome, CNPJ/CPF, categoria...">
+          </div>
+          <div class="filter-group">
+            <label for="fornecedores-mostrar-inativos">
+              <input type="checkbox" id="fornecedores-mostrar-inativos" style="width: auto; margin-right: 0.35rem;">
+              Mostrar inativos
+            </label>
+          </div>
+        </section>
+
+        <div id="fornecedores-lista-container" class="fornecedor-list"></div>
+      </section>
+
+      <section class="view-section card" data-view="fornecedores-form" id="view-fornecedores-form" hidden>
+        <h2>Novo fornecedor</h2>
+        <form id="fornecedores-form" class="lancamento-form">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="fornecedores-field-nome">Nome</label>
+              <input type="text" id="fornecedores-field-nome" required>
+            </div>
+            <div class="form-field">
+              <label for="fornecedores-field-documento">CNPJ/CPF — opcional</label>
+              <input type="text" id="fornecedores-field-documento">
+            </div>
+            <div class="form-field">
+              <label for="fornecedores-field-categoria">Categoria — opcional</label>
+              <input type="text" id="fornecedores-field-categoria" list="fornecedores-categorias-sugeridas" placeholder="Ex: Matéria-prima">
+              <datalist id="fornecedores-categorias-sugeridas"></datalist>
+            </div>
+            <div class="form-field">
+              <label for="fornecedores-field-telefone">Telefone — opcional</label>
+              <input type="text" id="fornecedores-field-telefone">
+            </div>
+            <div class="form-field">
+              <label for="fornecedores-field-email">E-mail — opcional</label>
+              <input type="email" id="fornecedores-field-email">
+            </div>
+            <div class="form-field">
+              <label for="fornecedores-field-prazo">Prazo de pagamento — opcional</label>
+              <input type="text" id="fornecedores-field-prazo" placeholder="Ex: 30 dias, à vista">
+            </div>
+            <div class="form-field form-field-wide">
+              <label for="fornecedores-field-observacao">Observação — opcional</label>
+              <input type="text" id="fornecedores-field-observacao">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="btn-salvar-fornecedor">Salvar fornecedor</button>
+            <span id="fornecedores-form-status" class="status-message"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="view-section" data-view="contas-pagar-lista" id="view-contas-pagar-lista" hidden>
+        <div class="contas-kpi-row" id="contas-pagar-kpis"></div>
+        <section class="filters-row card">
+          <div class="filter-group">
+            <label for="contas-pagar-filtro-status">Status</label>
+            <select id="contas-pagar-filtro-status">
+              <option value="">Todas</option>
+              <option value="Pendente">Pendentes</option>
+              <option value="Atrasado">Atrasadas</option>
+              <option value="Pago">Pagas</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="contas-pagar-filtro-categoria">Categoria</label>
+            <select id="contas-pagar-filtro-categoria"></select>
+          </div>
+          <div class="filter-group filter-group-grow">
+            <label for="contas-pagar-busca">Buscar</label>
+            <input type="text" id="contas-pagar-busca" placeholder="Descrição, fornecedor...">
+          </div>
+        </section>
+        <div id="contas-pagar-lista-container" class="fornecedor-list"></div>
+      </section>
+
+      <section class="view-section card" data-view="contas-pagar-form" id="view-contas-pagar-form" hidden>
+        <h2>Nova conta a pagar</h2>
+        <form id="contas-pagar-form" class="lancamento-form">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="contas-pagar-field-descricao">Descrição</label>
+              <input type="text" id="contas-pagar-field-descricao" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-pagar-field-contraparte">Fornecedor — opcional</label>
+              <input type="text" id="contas-pagar-field-contraparte">
+            </div>
+            <div class="form-field">
+              <label for="contas-pagar-field-categoria">Categoria — opcional</label>
+              <input type="text" id="contas-pagar-field-categoria">
+            </div>
+            <div class="form-field">
+              <label for="contas-pagar-field-valor">Valor (R$)</label>
+              <input type="number" id="contas-pagar-field-valor" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-pagar-field-vencimento">Vencimento</label>
+              <input type="date" id="contas-pagar-field-vencimento" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-pagar-field-recorrente">
+                <input type="checkbox" id="contas-pagar-field-recorrente" style="width: auto; margin-right: 0.35rem;">
+                Recorrente (repete todo mês)
+              </label>
+            </div>
+            <div class="form-field form-field-wide">
+              <label for="contas-pagar-field-observacao">Observação — opcional</label>
+              <input type="text" id="contas-pagar-field-observacao">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="btn-salvar-contas-pagar">Salvar conta</button>
+            <span id="contas-pagar-form-status" class="status-message"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="view-section" data-view="contas-receber-lista" id="view-contas-receber-lista" hidden>
+        <div class="contas-kpi-row" id="contas-receber-kpis"></div>
+        <section class="filters-row card">
+          <div class="filter-group">
+            <label for="contas-receber-filtro-status">Status</label>
+            <select id="contas-receber-filtro-status">
+              <option value="">Todas</option>
+              <option value="Pendente">Pendentes</option>
+              <option value="Atrasado">Atrasadas</option>
+              <option value="Recebido">Recebidas</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="contas-receber-filtro-categoria">Categoria</label>
+            <select id="contas-receber-filtro-categoria"></select>
+          </div>
+          <div class="filter-group filter-group-grow">
+            <label for="contas-receber-busca">Buscar</label>
+            <input type="text" id="contas-receber-busca" placeholder="Descrição, cliente...">
+          </div>
+        </section>
+        <div id="contas-receber-lista-container" class="fornecedor-list"></div>
+      </section>
+
+      <section class="view-section card" data-view="contas-receber-form" id="view-contas-receber-form" hidden>
+        <h2>Nova conta a receber</h2>
+        <form id="contas-receber-form" class="lancamento-form">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="contas-receber-field-descricao">Descrição</label>
+              <input type="text" id="contas-receber-field-descricao" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-receber-field-contraparte">Cliente — opcional</label>
+              <input type="text" id="contas-receber-field-contraparte">
+            </div>
+            <div class="form-field">
+              <label for="contas-receber-field-categoria">Categoria — opcional</label>
+              <input type="text" id="contas-receber-field-categoria">
+            </div>
+            <div class="form-field">
+              <label for="contas-receber-field-valor">Valor (R$)</label>
+              <input type="number" id="contas-receber-field-valor" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-receber-field-vencimento">Vencimento</label>
+              <input type="date" id="contas-receber-field-vencimento" required>
+            </div>
+            <div class="form-field">
+              <label for="contas-receber-field-recorrente">
+                <input type="checkbox" id="contas-receber-field-recorrente" style="width: auto; margin-right: 0.35rem;">
+                Recorrente (repete todo mês)
+              </label>
+            </div>
+            <div class="form-field form-field-wide">
+              <label for="contas-receber-field-observacao">Observação — opcional</label>
+              <input type="text" id="contas-receber-field-observacao">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="btn-salvar-contas-receber">Salvar conta</button>
+            <span id="contas-receber-form-status" class="status-message"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="view-section" data-view="relatorio" id="view-relatorio" hidden>
+        <section class="filters-row card">
+          <div class="filter-group">
+            <label for="relatorio-inicio">De</label>
+            <input type="date" id="relatorio-inicio">
+          </div>
+          <div class="filter-group">
+            <label for="relatorio-fim">Até</label>
+            <input type="date" id="relatorio-fim">
+          </div>
+          <div class="relatorio-presets">
+            <button type="button" data-relatorio-preset="mes-atual">Mês atual</button>
+            <button type="button" data-relatorio-preset="mes-anterior">Mês anterior</button>
+            <button type="button" data-relatorio-preset="ano-atual">Ano atual</button>
+            <button type="button" data-relatorio-preset="tudo">Tudo</button>
+          </div>
+        </section>
+        <div class="contas-kpi-row" id="relatorio-kpi-row"></div>
+        <div class="charts-grid">
+          <div class="chart-card card full-width" id="relatorio-chart-categorias">
+            <h2>Gastos por categoria</h2>
+            <div class="chart-body"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="view-section" data-view="ajustes" id="view-ajustes" hidden>
         <section class="card">
           <h2>Minha conta</h2>
@@ -866,6 +1109,11 @@
 <script src="js/form.js"></script>
 <script src="js/estoque.js"></script>
 <script src="js/estoque-ui.js"></script>
+<script src="js/fornecedores.js"></script>
+<script src="js/fornecedores-ui.js"></script>
+<script src="js/contas.js"></script>
+<script src="js/contas-ui.js"></script>
+<script src="js/relatorio.js"></script>
 <script src="js/export.js"></script>
 <script src="js/command-palette.js"></script>
 <script src="js/nav.js"></script>

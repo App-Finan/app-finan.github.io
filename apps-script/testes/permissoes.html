@@ -14,6 +14,7 @@ function makeDeps(state) {
     verifyToken: (t) => { if (!TOKENS[t]) throw new GatewayError_(401, "bad token"); return TOKENS[t]; },
     cache: { get: (k) => cacheStore[k] || null, put: (k, v) => { cacheStore[k] = v; }, remove: (k) => { delete cacheStore[k]; } },
     lock: (fn) => fn(),
+    now: () => Date.now(),
     requests: {
       list: () => state.__requests.map((r) => Object.assign({}, r)),
       add: (r) => { state.__requests.push({ linha: state.__requests.length + 2, data: "2026-09-19", email: r.email, nome: r.nome, empresa: r.empresa, tipo: r.tipo, mensagem: r.mensagem, status: "Pendente", nota: "" }); },
@@ -45,7 +46,7 @@ function makeDeps(state) {
 function freshState() {
   return {
     __created: 0, __registry: [], __requests: [], __mail: [],
-    [IPA]: { Lojas: [[]], Contas: [[]], Empresas: [[]], Categoria: [[]], Pessoa: [[]], Produto: [[]], "Tipo de Produto": [[]], Marcas: [[]], "Lançamento": [[]], Estoque: [[]], Usuários: [["Email","Nome","Perfil"], ["viz@x.com","Viz","Visualizador"], ["edi@x.com","Edi","Editor"], ["mas@x.com","Mas","Master"], [ADMIN_EMAIL,"Matheus","Master"]] },
+    [IPA]: { Lojas: [[]], Contas: [[]], Empresas: [[]], Categoria: [[]], Pessoa: [[]], Produto: [[]], "Tipo de Produto": [[]], Marcas: [[]], "Lançamento": [[]], Estoque: [[]], Fornecedores: [[]], "Contas a Pagar": [[]], "Contas a Receber": [[]], Usuários: [["Email","Nome","Perfil"], ["viz@x.com","Viz","Visualizador"], ["edi@x.com","Edi","Editor"], ["mas@x.com","Mas","Master"], [ADMIN_EMAIL,"Matheus","Master"]] },
     [CAR]: { "Lançamento": [[]], Estoque: [[]] }, // no Usuários tab yet
   };
 }
@@ -804,6 +805,91 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   const l2 = state.__requests[state.__requests.length - 1].linha;
   const noMaster = fwd("admin", { linha: l2, spreadsheetId: CAR });
   results.push((noMaster.status === 400 ? "PASS" : "FAIL") + " forwarding to a company with no administrator is refused");
+})();
+
+// --- ERP, Fase 1: Fornecedores / Contas a Pagar / Contas a Receber --------
+
+["Fornecedores", "Contas a Pagar", "Contas a Receber"].forEach((tab) => {
+  run(`viz reads ${tab}`, "viz", u({ action: "getValues", range: `'${tab}'!A2:J` }), "ok");
+  run(`viz cannot write ${tab}`, "viz", u({ action: "updateValues", range: `'${tab}'!A5:J5`, values: row(["x"]) }), 403);
+  run(`edi writes ${tab}`, "edi", u({ action: "updateValues", range: `'${tab}'!A5:J5`, values: row(["x"]) }), "ok");
+  run(`mas writes ${tab}`, "mas", u({ action: "updateValues", range: `'${tab}'!A5:J5`, values: row(["x"]) }), "ok");
+  run(`nobody cannot read ${tab}`, "nobody", u({ action: "getValues", range: `'${tab}'!A2:J` }), 403);
+  // creating the tab itself (not just a row in it) is Master-only, even
+  // though an Editor may write rows once it exists — same as Usuários/Configuração.
+  run(`edi cannot create the ${tab} tab`, "edi", u({ action: "addTab", title: tab }), 403);
+  run(`mas can create the ${tab} tab`, "mas", u({ action: "addTab", title: tab }), "ok");
+});
+run("a company's Fornecedores stays isolated from another company's", "mas", { action: "getValues", spreadsheetId: CAR, range: "Fornecedores!A2:J" }, 403);
+run("hostile text in a Fornecedores cell is still just a scalar string write (RAW, never a formula)", "edi", u({ action: "updateValues", range: "Fornecedores!A5:A5", values: row(["=HYPERLINK(\"http://evil\")"]) }), "ok");
+run("a Contas a Pagar row rejects a non-scalar cell (same validateRow_ as every tab)", "edi", u({ action: "updateValues", range: "'Contas a Pagar'!A5:A5", values: row([{ f: "=1" }]) }), 400);
+run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "addTab", title: "Salários" }), 403);
+
+// --- ERP, Fase 1: avisos de vencimento (verificarLembretes) ----------------
+
+(function () {
+  function contasState(pagarRows, receberRows) {
+    const state = freshState();
+    state[IPA]["Contas a Pagar"] = [["Descrição", "Fornecedor", "Categoria", "Valor", "Vencimento", "Status", "Pago em", "Recorrente", "Observação", "Avisado em"]].concat(pagarRows || []);
+    state[IPA]["Contas a Receber"] = [["Descrição", "Cliente", "Categoria", "Valor", "Vencimento", "Status", "Recebido em", "Recorrente", "Observação", "Avisado em"]].concat(receberRows || []);
+    return state;
+  }
+  const HOJE = Math.floor((Date.now() - Date.UTC(1899, 11, 30)) / 86400000);
+
+  // viz cannot trigger the check (would spend mail quota on something a Visualizador has no business sending)
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", ""]], []);
+    const r = runOn("viz cannot trigger verificarLembretes", "viz", u({ action: "verificarLembretes" }), 403, state);
+    results.push((state.__mail.length === 0 ? "PASS" : "FAIL") + " ...and no mail was sent trying");
+  }
+
+  // edi can trigger it; an overdue Pendente conta mails every Editor+Master, never the Visualizador
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", ""]], []);
+    const r = runOn("edi triggers verificarLembretes with one overdue conta", "edi", u({ action: "verificarLembretes" }), "ok", state);
+    results.push((r.payload && r.payload.avisados === 1 ? "PASS" : "FAIL") + " it reports exactly one conta notified");
+    const recipients = state.__mail.map((m) => m.to);
+    results.push((recipients.indexOf("edi@x.com") !== -1 && recipients.indexOf("mas@x.com") !== -1 ? "PASS" : "FAIL") + " both Editor and Master were e-mailed");
+    results.push((recipients.indexOf("viz@x.com") === -1 ? "PASS" : "FAIL") + " the Visualizador was not e-mailed");
+    results.push((state.__mail[0] && /ATRASADA/.test(state.__mail[0].body) ? "PASS" : "FAIL") + " the overdue item is flagged ATRASADA in the e-mail body");
+  }
+
+  // a conta already marked Avisado em = hoje is not re-mailed (dedup)
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", HOJE]], []);
+    const r = runOn("a conta already notified today is skipped", "edi", u({ action: "verificarLembretes" }), "ok", state);
+    results.push((r.payload && r.payload.avisados === 0 && state.__mail.length === 0 ? "PASS" : "FAIL") + " ...no mail, avisados: 0");
+  }
+
+  // a Pago conta, however overdue its Vencimento, is never a reminder candidate
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 30, "Pago", HOJE - 1, "Não", "", ""]], []);
+    const r = runOn("a conta already Pago is never reminded about", "edi", u({ action: "verificarLembretes" }), "ok", state);
+    results.push((r.payload && r.payload.avisados === 0 && state.__mail.length === 0 ? "PASS" : "FAIL") + " ...no mail, avisados: 0");
+  }
+
+  // a conta due far in the future (beyond the 3-day window) is not a candidate yet
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE + 30, "Pendente", "", "Não", "", ""]], []);
+    const r = runOn("a conta due in 30 days is outside the reminder window", "edi", u({ action: "verificarLembretes" }), "ok", state);
+    results.push((r.payload && r.payload.avisados === 0 ? "PASS" : "FAIL") + " ...avisados: 0");
+  }
+
+  // the check is scoped to the one company it was called for — it never reads or mails about another company's contas
+  {
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", ""]], []);
+    state[CAR] = { "Lançamento": [[]], Estoque: [[]], Usuários: [["Email","Nome","Perfil"], ["edi@x.com","Edi","Editor"]] };
+    const deps = makeDeps(state);
+    handleRequest({ token: "edi", action: "verificarLembretes", spreadsheetId: CAR }, deps); // the other company, no contas tabs at all there
+    results.push((state.__mail.length === 0 ? "PASS" : "FAIL") + " a company with no Contas tabs yet is simply a no-op, not a crash");
+  }
+
+  // Contas a Receber feeds the same digest, with its own "Recebido" status word
+  {
+    const state = contasState([], [["Venda a prazo", "Cliente VIP", "Vendas", 800, HOJE, "Pendente", "", "Não", "", ""]]);
+    const r = runOn("Contas a Receber due today is also picked up", "mas", u({ action: "verificarLembretes" }), "ok", state);
+    results.push((r.payload && r.payload.avisados === 1 && state.__mail[0] && /A RECEBER/.test(state.__mail[0].body) ? "PASS" : "FAIL") + " ...reported and labelled A RECEBER in the e-mail");
+  }
 })();
 
 const failed = results.filter((r) => r.indexOf("FAIL") === 0);

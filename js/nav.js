@@ -3,6 +3,13 @@ const VIEW_TITLES = {
   "lancamento-lista": "Fluxo de Caixa",
   "lancamento-form": "Novo lançamento",
   "estoque-lista": "Estoque",
+  "fornecedores-lista": "Fornecedores",
+  "fornecedores-form": "Novo fornecedor",
+  "contas-pagar-lista": "Contas a Pagar",
+  "contas-pagar-form": "Nova conta a pagar",
+  "contas-receber-lista": "Contas a Receber",
+  "contas-receber-form": "Nova conta a receber",
+  relatorio: "Relatório",
   ajustes: "Ajustes",
 };
 
@@ -17,6 +24,13 @@ const VIEW_EYEBROWS = {
   "lancamento-form": "// fluxo de caixa",
   "estoque-lista": "// estoque",
   "estoque-form": "// estoque",
+  "fornecedores-lista": "// compras",
+  "fornecedores-form": "// compras",
+  "contas-pagar-lista": "// financeiro",
+  "contas-pagar-form": "// financeiro",
+  "contas-receber-lista": "// financeiro",
+  "contas-receber-form": "// financeiro",
+  relatorio: "// financeiro",
   ajustes: "// ajustes",
 };
 
@@ -25,6 +39,13 @@ const VIEW_GROUPS = {
   "lancamento-form": "lancamento",
   "estoque-lista": "estoque",
   "estoque-form": "estoque",
+  "fornecedores-lista": "compras",
+  "fornecedores-form": "compras",
+  "contas-pagar-lista": "financeiro",
+  "contas-pagar-form": "financeiro",
+  "contas-receber-lista": "financeiro",
+  "contas-receber-form": "financeiro",
+  relatorio: "financeiro",
 };
 
 const SIDEBAR_COLLAPSED_KEY = "financegold_sidebar_collapsed";
@@ -194,8 +215,14 @@ function applyRoleVisibility(role) {
   const editable = canEdit(role);
   const lancForm = document.querySelector('.nav-subitem[data-view="lancamento-form"]');
   const estoqueForm = document.querySelector('.nav-subitem[data-view="estoque-form"]');
+  const fornecedoresForm = document.querySelector('.nav-subitem[data-view="fornecedores-form"]');
+  const contasPagarForm = document.querySelector('.nav-subitem[data-view="contas-pagar-form"]');
+  const contasReceberForm = document.querySelector('.nav-subitem[data-view="contas-receber-form"]');
   if (lancForm) lancForm.hidden = !editable;
   if (estoqueForm) estoqueForm.hidden = !editable;
+  if (fornecedoresForm) fornecedoresForm.hidden = !editable;
+  if (contasPagarForm) contasPagarForm.hidden = !editable;
+  if (contasReceberForm) contasReceberForm.hidden = !editable;
 }
 
 let navigationInitialized = false;
