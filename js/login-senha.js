@@ -123,15 +123,23 @@ function mostrarTelaDeSenha(id) {
 
 async function enviarLoginSenha(evento) {
   evento.preventDefault();
-  const email = porId("login-email").value.trim();
+  const identificador = porId("login-email").value.trim();
   const senha = porId("login-senha").value;
   const lembrar = porId("login-lembrar").checked;
-  if (!email || !senha) return dizer("login-senha-status", "Informe o e-mail e a senha.", true);
-  if (!emailParecido(email)) return dizer("login-senha-status", "Informe um e-mail válido.", true);
+  if (!identificador || !senha) return dizer("login-senha-status", "Informe o e-mail (ou login) e a senha.", true);
+  if (!emailParecido(identificador) && !loginParecido(identificador)) return dizer("login-senha-status", "Informe um e-mail ou um login válidos.", true);
   const botao = porId("btn-entrar-senha");
   botao.disabled = true;
   dizer("login-senha-status", "Verificando...", false);
   try {
+    // The password key is derived with the e-mail as salt (js/senha.js), so a
+    // typed "login" (username) must first be resolved to the real e-mail —
+    // the server never sees the password itself, only the derived key.
+    let email = identificador;
+    if (!emailParecido(identificador)) {
+      const achado = await gatewayCall("pwBuscarEmailPorLogin", { login: identificador }, null);
+      email = achado.email;
+    }
     const chave = await derivarChaveDeSenha(senha, email);
     const resposta = await gatewayCall("pwLogin", { email, chave, lembrar }, null);
     porId("login-senha").value = "";
@@ -148,7 +156,7 @@ async function enviarLoginSenha(evento) {
 // ---- create an access -------------------------------------------------------
 
 function abrirCadastroSenha() {
-  ["cs-nome", "cs-email", "cs-empresa"].forEach((id) => (porId(id).value = ""));
+  ["cs-nome", "cs-email", "cs-login", "cs-funcao", "cs-empresa"].forEach((id) => (porId(id).value = ""));
   limparCamposDeSenha(porId("senha-cadastro-screen"));
   porId("cs-email").value = porId("login-email").value.trim();
   cadastroChave = null;
@@ -179,11 +187,15 @@ async function enviarCadastro(evento) {
   evento.preventDefault();
   const nome = porId("cs-nome").value.trim();
   const email = porId("cs-email").value.trim();
+  const login = porId("cs-login").value.trim();
+  const funcao = porId("cs-funcao").value.trim();
   const empresa = porId("cs-empresa").value.trim();
   const senha = porId("cs-senha").value;
   const confirmar = porId("cs-confirmar").value;
   if (!nome) return dizer("cadastro-senha-status", "Informe o seu nome.", true);
   if (!emailParecido(email)) return dizer("cadastro-senha-status", "Informe um e-mail válido.", true);
+  if (!loginParecido(login)) return dizer("cadastro-senha-status", "Escolha um login com 3 a 30 letras, números, ponto, hífen ou underline.", true);
+  if (!funcao) return dizer("cadastro-senha-status", "Informe a sua função na empresa.", true);
   const forca = avaliarSenha(senha, email);
   if (!forca.ok) return dizer("cadastro-senha-status", forca.dica || "Escolha uma senha mais forte.", true);
   if (senha !== confirmar) return dizer("cadastro-senha-status", "As duas senhas não são iguais.", true);
@@ -192,7 +204,7 @@ async function enviarCadastro(evento) {
   dizer("cadastro-senha-status", "Enviando...", false);
   try {
     cadastroChave = await derivarChaveDeSenha(senha, email);
-    cadastroDados = { nome, email, empresa, mensagem: "" };
+    cadastroDados = { nome, email, login, funcao, empresa, mensagem: "" };
     await gatewayCall("pwRegister", Object.assign({ chave: cadastroChave }, cadastroDados), null);
     porId("cadastro-codigo-lede").textContent = `Enviamos um código de 6 números para ${email}. Digite-o abaixo. Ele vale por 15 minutos.`;
     porId("cs-codigo").value = "";
@@ -218,9 +230,16 @@ async function confirmarCodigoDoCadastro(evento) {
   botao.disabled = true;
   dizer("cadastro-codigo-status", "Confirmando...", false);
   try {
-    await gatewayCall("pwConfirmar", { email: cadastroDados.email, codigo }, null);
+    const resposta = await gatewayCall("pwConfirmar", { email: cadastroDados.email, codigo }, null);
     clearInterval(reenvioTimer);
     cadastroChave = null;
+    // A Master may have already authorized this e-mail in some company: then
+    // there is nothing left to wait for (see autorizadoEmAlgumaEmpresa_).
+    const jaAtivo = resposta.situacao === "Ativo";
+    porId("cadastro-pronto-titulo").textContent = jaAtivo ? "Acesso liberado" : "Cadastro recebido";
+    porId("cadastro-pronto-lede").textContent = jaAtivo
+      ? "Seu e-mail já era autorizado por uma empresa, então o seu login e senha já estão liberados. Entre com o seu e-mail (ou login) e a senha que você criou."
+      : "Seu e-mail foi confirmado. Agora o administrador do sistema precisa liberar o seu acesso. Você receberá um e-mail assim que isso acontecer e poderá entrar com o seu e-mail (ou login) e a senha que criou.";
     mostrarPasso("cadastro", "pronto");
   } catch (err) {
     console.error(err);
@@ -430,7 +449,7 @@ function renderLoginsSistema() {
     card.appendChild(titulo);
     const meta = document.createElement("div");
     meta.className = "pedido-meta";
-    meta.textContent = [l.empresa || "empresa não informada", "e-mail confirmado", dataCurta(l.criadoEm)].filter(Boolean).join(" · ");
+    meta.textContent = [l.funcao, l.empresa || "empresa não informada", "e-mail confirmado", dataCurta(l.criadoEm)].filter(Boolean).join(" · ");
     card.appendChild(meta);
     const acoes = document.createElement("div");
     acoes.className = "pedido-acoes";
@@ -448,7 +467,7 @@ function renderLoginsSistema() {
     li.appendChild(nome);
     const meta = document.createElement("div");
     meta.className = "pedido-meta";
-    meta.textContent = [l.situacao, l.ultimoAcesso ? `último acesso ${dataCurta(l.ultimoAcesso)}` : "nunca entrou"].join(" · ");
+    meta.textContent = [l.situacao, l.funcao, l.ultimoAcesso ? `último acesso ${dataCurta(l.ultimoAcesso)}` : "nunca entrou"].filter(Boolean).join(" · ");
     li.appendChild(meta);
     const acoes = document.createElement("div");
     acoes.className = "login-acoes";

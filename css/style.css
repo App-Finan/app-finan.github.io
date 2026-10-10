@@ -126,7 +126,8 @@
 :root[data-theme="light"] #company-picker-screen,
 :root[data-theme="light"] #cadastro-screen,
 :root[data-theme="light"] #acesso-negado-screen,
-:root[data-theme="light"] #solicitar-acesso-screen {
+:root[data-theme="light"] #solicitar-acesso-screen,
+:root[data-theme="light"] #completar-cadastro-screen {
   color-scheme: dark;
   --color-bg: #060504;
   --color-surface: #0e0c08;

@@ -56,8 +56,8 @@
         <div class="auth-divisor"><span>ou entre com e-mail e senha</span></div>
         <form id="login-senha-form" class="auth-form" novalidate>
           <div class="auth-campo">
-            <label for="login-email">E-mail</label>
-            <input type="email" id="login-email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="120">
+            <label for="login-email">E-mail ou login</label>
+            <input type="text" id="login-email" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="120">
           </div>
           <div class="auth-campo">
             <label for="login-senha">Senha</label>
@@ -85,10 +85,12 @@
       <div id="cadastro-passo-dados">
         <div class="auth-eyebrow">[ novo acesso ]</div>
         <h1>Criar acesso</h1>
-        <p class="auth-lede">Crie um login com e-mail e senha. Vamos confirmar o seu e-mail e, em seguida, o administrador do sistema libera o acesso.</p>
+        <p class="auth-lede">Crie um login com e-mail e senha. Vamos confirmar o seu e-mail; se ele já foi autorizado por uma empresa, o acesso é liberado na hora — senão, o administrador do sistema libera em seguida.</p>
         <form id="cadastro-senha-form" class="auth-form" novalidate>
           <div class="auth-campo"><label for="cs-nome">Seu nome</label><input type="text" id="cs-nome" autocomplete="name" maxlength="80"></div>
           <div class="auth-campo"><label for="cs-email">E-mail</label><input type="email" id="cs-email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="120"></div>
+          <div class="auth-campo"><label for="cs-login">Login <span class="auth-opcional">(para entrar sem digitar o e-mail)</span></label><input type="text" id="cs-login" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30"></div>
+          <div class="auth-campo"><label for="cs-funcao">Sua função na empresa</label><input type="text" id="cs-funcao" autocomplete="organization-title" maxlength="60" placeholder="Ex.: Financeiro, CFO, Vendas"></div>
           <div class="auth-campo"><label for="cs-empresa">Empresa <span class="auth-opcional">(opcional)</span></label><input type="text" id="cs-empresa" autocomplete="organization" maxlength="80"></div>
           <div class="auth-campo">
             <label for="cs-senha">Senha</label>
@@ -119,8 +121,8 @@
 
       <div id="cadastro-passo-pronto" hidden>
         <div class="auth-eyebrow">[ quase lá ]</div>
-        <h1>Cadastro recebido</h1>
-        <p class="auth-lede">Seu e-mail foi confirmado. Agora o administrador do sistema precisa liberar o seu acesso. Você receberá um e-mail assim que isso acontecer e poderá entrar com o seu e-mail e a senha que criou.</p>
+        <h1 id="cadastro-pronto-titulo">Cadastro recebido</h1>
+        <p class="auth-lede" id="cadastro-pronto-lede">Seu e-mail foi confirmado. Agora o administrador do sistema precisa liberar o seu acesso. Você receberá um e-mail assim que isso acontecer e poderá entrar com o seu e-mail (ou login) e a senha que criou.</p>
       </div>
 
       <button type="button" class="btn-logout" id="btn-cadastro-voltar">Voltar para a entrada</button>
@@ -235,6 +237,35 @@
       <p id="solicitar-status" class="status-message"></p>
       <button type="button" id="btn-solicitar-verificar" class="btn-logout" hidden>Verificar de novo</button>
       <button type="button" id="btn-solicitar-sair" class="btn-logout">Sair</button>
+    </div>
+  </div>
+</div>
+
+<div id="completar-cadastro-screen" class="login-screen" hidden>
+  <div class="auth-brand"><div class="auth-dotgrid"></div><div class="auth-brand-mark"><span class="auth-logo" data-art="logo-lg"></span><span class="auth-wordmark">Finan.</span></div></div>
+  <div class="auth-panel">
+    <div class="auth-panel-inner">
+      <div class="auth-eyebrow">[ acesso liberado ]</div>
+      <h1>Crie um login e senha</h1>
+      <p class="auth-lede">Sua empresa já liberou o seu acesso (<strong id="cc-email-mostrado"></strong>). Para não precisar entrar com o Google toda vez, crie aqui um login e senha próprios — as permissões continuam sendo definidas pelo Master da empresa.</p>
+      <form id="completar-cadastro-form" class="auth-form" novalidate>
+        <div class="auth-campo"><label for="cc-nome">Seu nome</label><input type="text" id="cc-nome" autocomplete="name" maxlength="80"></div>
+        <div class="auth-campo"><label for="cc-login">Login <span class="auth-opcional">(para entrar sem digitar o e-mail)</span></label><input type="text" id="cc-login" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30"></div>
+        <div class="auth-campo"><label for="cc-funcao">Sua função na empresa</label><input type="text" id="cc-funcao" autocomplete="organization-title" maxlength="60" placeholder="Ex.: Financeiro, CFO, Vendas"></div>
+        <div class="auth-campo">
+          <label for="cc-senha">Senha</label>
+          <div class="campo-senha"><input type="password" id="cc-senha" autocomplete="new-password" maxlength="128"></div>
+          <div class="forca-senha" data-forca-de="cc-senha" data-email-de="cc-email-oculto"><div class="forca-barra"><span></span></div><p class="forca-texto"></p></div>
+        </div>
+        <div class="auth-campo">
+          <label for="cc-confirmar">Repita a senha</label>
+          <div class="campo-senha"><input type="password" id="cc-confirmar" autocomplete="new-password" maxlength="128"></div>
+        </div>
+        <input type="email" id="cc-email-oculto" class="visualmente-oculto" tabindex="-1" aria-hidden="true" readonly>
+        <button type="submit" id="btn-completar-cadastro" class="auth-btn">Criar login e senha</button>
+        <p id="completar-cadastro-status" class="status-message" role="alert" aria-live="polite"></p>
+      </form>
+      <button type="button" class="link-btn" id="btn-completar-cadastro-pular">Pular por agora</button>
     </div>
   </div>
 </div>
@@ -913,6 +944,37 @@
           </form>
         </section>
 
+        <section class="card" id="ajustes-criar-senha-card" hidden>
+          <h2>Login e senha</h2>
+          <p class="field-hint">Você entra hoje com a conta Google. Crie também um login e senha para não precisar repetir o login do Google a cada hora.</p>
+          <form id="ajustes-criar-senha-form" class="lancamento-form" novalidate>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="acs-login">Login <span class="auth-opcional">(para entrar sem digitar o e-mail)</span></label>
+                <input type="text" id="acs-login" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="30">
+              </div>
+              <div class="form-field">
+                <label for="acs-funcao">Sua função na empresa</label>
+                <input type="text" id="acs-funcao" autocomplete="organization-title" maxlength="60" placeholder="Ex.: Financeiro, CFO, Vendas">
+              </div>
+              <div class="form-field">
+                <label for="acs-senha">Senha</label>
+                <div class="campo-senha"><input type="password" id="acs-senha" autocomplete="new-password" maxlength="128"></div>
+                <div class="forca-senha" data-forca-de="acs-senha" data-email-de="ajustes-conta-email-oculto"><div class="forca-barra"><span></span></div><p class="forca-texto"></p></div>
+              </div>
+              <div class="form-field">
+                <label for="acs-confirmar">Repita a senha</label>
+                <div class="campo-senha"><input type="password" id="acs-confirmar" autocomplete="new-password" maxlength="128"></div>
+              </div>
+            </div>
+            <input type="email" id="ajustes-conta-email-oculto" class="visualmente-oculto" tabindex="-1" aria-hidden="true" readonly>
+            <div class="form-actions">
+              <button type="submit" id="btn-ajustes-criar-senha">Criar login e senha</button>
+              <span id="ajustes-criar-senha-status" class="status-message" role="alert" aria-live="polite"></span>
+            </div>
+          </form>
+        </section>
+
         <section class="card" id="ajustes-senha-card" hidden>
           <h2>Senha de acesso</h2>
           <p class="field-hint">Sua senha é pessoal: não compartilhe com ninguém. Ao trocar, todos os outros aparelhos em que você está conectado são desconectados.</p>
@@ -1087,6 +1149,7 @@
 <script src="js/segmentos.js"></script>
 <script src="js/senha.js"></script>
 <script src="js/login-senha.js"></script>
+<script src="js/completar-cadastro.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/sheets.js"></script>
 <script src="js/esquema.js"></script>

@@ -23,6 +23,10 @@ let currentPedidosPendentes = 0;
 let currentPedido = null;
 let currentUserLinha = null;
 let ajustesHandlersReady = false;
+// Whether the signed-in e-mail already has an active e-mail+senha login (see
+// js/completar-cadastro.js). Defaults to true (no prompt) so direct mode —
+// which has no password system at all — never shows anything about it.
+let currentTemSenhaAtiva = true;
 
 function setUserIdentity(nome) {
   userStatus.textContent = nome;
@@ -52,6 +56,7 @@ function hideAllScreens() {
   sistemaScreen.hidden = true;
   document.getElementById("senha-cadastro-screen").hidden = true;
   document.getElementById("senha-esqueci-screen").hidden = true;
+  document.getElementById("completar-cadastro-screen").hidden = true;
   appShell.hidden = true;
 }
 
@@ -234,6 +239,13 @@ async function resolveProfileAndEnter(tenant, token, email) {
       return fetchUsuario(email, token);
     });
     if (usuario) {
+      // Offer the e-mail+senha "login próprio" only right after a Google
+      // sign-in (a password session obviously already has one) and only when
+      // it does not exist yet — "me" already told us (resolveCompaniesForEmail).
+      if (CONFIG.GATEWAY_URL && tipoDeSessao() === "google" && !currentTemSenhaAtiva) {
+        mostrarCompletarCadastro(email, token, usuario);
+        return;
+      }
       startApp(token, usuario.nome, usuario.perfil, usuario.linha);
       return;
     }
@@ -399,6 +411,7 @@ function setupAjustesHandlers() {
   document.getElementById("btn-refresh-dashboard").addEventListener("click", refreshAllData);
 
   setupEditarPerfilForm();
+  setupCriarSenhaAjustes();
 }
 
 const LAST_SESSION_KEY = "financegold_last_session";
@@ -497,9 +510,13 @@ async function startApp(token, nome, perfil, linha) {
 
   document.getElementById("ajustes-conta-nome").textContent = nome;
   document.getElementById("ajustes-conta-email").textContent = currentEmail || "";
+  document.getElementById("ajustes-conta-email-oculto").value = currentEmail || "";
   document.getElementById("ajustes-conta-empresa").textContent = sidebarEmpresa.textContent;
   document.getElementById("ajustes-trocar-empresa-card").hidden = currentCompanies.length <= 1;
   prepararCartaoDeSenha();
+  // Offered to anyone who skipped "login próprio" at sign-in (see js/completar-cadastro.js).
+  document.getElementById("ajustes-criar-senha-card").hidden =
+    !(CONFIG.GATEWAY_URL && tipoDeSessao() === "google" && !currentTemSenhaAtiva);
   document.getElementById("ajustes-usuarios-section").hidden = !isMaster(perfil);
   // Creating companies and editing the lists need the gateway (direct mode has
   // no registry); the company's Master edits lists, only system admins create companies.
@@ -668,6 +685,7 @@ async function resolveCompaniesForEmail(email, token) {
     currentIsSuperAdmin = Boolean(me.superAdmin);
     currentPedido = me.pedido || null;
     currentPedidosPendentes = me.pedidosPendentes || 0;
+    currentTemSenhaAtiva = Boolean(me.temSenhaAtiva);
     return companiesFromMe(me);
   }
   const found = (lookupTenants(email) || []).slice();

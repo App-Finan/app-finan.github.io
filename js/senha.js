@@ -20,6 +20,13 @@ function loginComSenhaDisponivel() {
   return Boolean(window.crypto && window.crypto.subtle && typeof TextEncoder !== "undefined");
 }
 
+// A chosen "login" (apelido): letters/numbers/._- , 3-30 chars, no "@" — mirrors
+// loginValido_ in apps-script/Code.gs (the server is the real check; this is
+// only so the person sees the problem before submitting).
+function loginParecido(valor) {
+  return /^[A-Za-z0-9._-]{3,30}$/.test(String(valor || ""));
+}
+
 // -> a 43-character base64url string (256 bits) that stands in for the password.
 async function derivarChaveDeSenha(senha, email) {
   if (!loginComSenhaDisponivel()) {

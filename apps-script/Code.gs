@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-10-manter-conectado";
+const GATEWAY_VERSION = "2026-10-10-login-proprio-e-autoaprovacao";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -533,6 +533,7 @@ function despachar_(body, deps, email, sessaoSenha) {
   if (action === "pwTrocarSenha") return acaoPwTrocarSenha_(deps, email, sessaoSenha, body);
   if (action === "pwListar") return acaoPwListar_(deps, email);
   if (action === "pwDecidir") return acaoPwDecidir_(deps, email, body);
+  if (action === "completarCadastroAutorizado") return actionCompletarCadastro_(deps, email, sessaoSenha, body);
   if (action === "me") return actionMe_(deps, email);
   if (action === "createCompany") return actionCreateCompany_(deps, email, body);
   if (action === "requestAccess") return actionRequestAccess_(deps, email, body);
@@ -696,6 +697,23 @@ function getAccess_(deps, email, spreadsheetId) {
   };
 }
 
+// Is this e-mail already listed in SOME company's Usuários tab? Used by the
+// e-mail + password login so a person a company Master has already
+// authorized (for Google sign-in) does not also have to wait for the system
+// administrator's separate approval to get a password — the Master's own
+// act of adding them already is the approval. A company that fails to read
+// is skipped, not treated as a match.
+function autorizadoEmAlgumaEmpresa_(deps, canon) {
+  const empresas = companyMap_(deps);
+  return Object.keys(empresas).some((id) => {
+    try {
+      return (loadUsuarios_(deps, id) || []).some((u) => u.chave === canon);
+    } catch (err) {
+      return false;
+    }
+  });
+}
+
 function actionMe_(deps, email) {
   const companies = [];
   const bootstrap = [];
@@ -722,7 +740,17 @@ function actionMe_(deps, email) {
       bootstrap.push({ spreadsheetId: spreadsheetId, empresa: info.empresa, sheetName: info.sheetName, segmento: segmentoValido_(info.segmento) });
     }
   });
-  const result = { companies: companies, bootstrap: bootstrap, superAdmin: isAdminEmail_(deps, email) };
+  // Whether this e-mail already has an ACTIVE e-mail+senha login: a signed-in
+  // Google session with no password yet is offered the chance to create one
+  // (see "completarCadastroAutorizado"); someone who already has a password
+  // is never asked again.
+  const loginSenha = deps.logins ? acharLogin_(deps, canonEmail_(email)) : null;
+  const result = {
+    companies: companies,
+    bootstrap: bootstrap,
+    superAdmin: isAdminEmail_(deps, email),
+    temSenhaAtiva: Boolean(loginSenha && loginSenha.c[LG.SIT] === SIT.ATIVO),
+  };
   if (result.superAdmin && deps.requests) {
     result.pedidosPendentes = deps.requests.list().filter((r) => r.status === "Pendente").length;
   }
@@ -1203,10 +1231,10 @@ function actionVerificarLembretes_(deps, access, spreadsheet, body) {
 // ===========================================================================
 
 const LOGINS_TAB = "Logins";
-const LOGIN_HEADERS = ["E-mail", "Nome", "Empresa", "Mensagem", "Situação", "Sal", "Verificador", "Versão", "Criado em", "Decidido em", "Código", "Código expira", "Tentativas do código", "Último acesso", "E-mail como digitado"];
-const LG = { EMAIL: 0, NOME: 1, EMPRESA: 2, MSG: 3, SIT: 4, SAL: 5, VER: 6, VERSAO: 7, CRIADO: 8, DECIDIDO: 9, CODIGO: 10, CODIGO_EXP: 11, CODIGO_TENT: 12, ULTIMO: 13, DIGITADO: 14 };
+const LOGIN_HEADERS = ["E-mail", "Nome", "Empresa", "Mensagem", "Situação", "Sal", "Verificador", "Versão", "Criado em", "Decidido em", "Código", "Código expira", "Tentativas do código", "Último acesso", "E-mail como digitado", "Login", "Função"];
+const LG = { EMAIL: 0, NOME: 1, EMPRESA: 2, MSG: 3, SIT: 4, SAL: 5, VER: 6, VERSAO: 7, CRIADO: 8, DECIDIDO: 9, CODIGO: 10, CODIGO_EXP: 11, CODIGO_TENT: 12, ULTIMO: 13, DIGITADO: 14, LOGIN: 15, FUNCAO: 16 };
 const SIT = { EMAIL: "Aguardando e-mail", APROVACAO: "Aguardando aprovação", ATIVO: "Ativo", RECUSADO: "Recusado", BLOQUEADO: "Bloqueado" };
-const PW_PUBLIC_ACTIONS = ["pwRegister", "pwConfirmar", "pwLogin", "pwEsqueci", "pwRedefinir"];
+const PW_PUBLIC_ACTIONS = ["pwRegister", "pwConfirmar", "pwLogin", "pwEsqueci", "pwRedefinir", "pwBuscarEmailPorLogin"];
 const PW_SESSION_MS = 12 * 60 * 60 * 1000;
 // "Manter conectado neste aparelho" (pwLogin's "lembrar" flag): a longer
 // session, kept in the browser's localStorage instead of sessionStorage (see
@@ -1370,7 +1398,7 @@ function loginsDeps_(cache) {
     const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
     if (titulos.indexOf(LOGINS_TAB) === -1) {
       Sheets.Spreadsheets.batchUpdate({ requests: [{ addSheet: { properties: { title: LOGINS_TAB } } }] }, id);
-      Sheets.Spreadsheets.Values.update({ values: [LOGIN_HEADERS] }, id, LOGINS_TAB + "!A1:O1", { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [LOGIN_HEADERS] }, id, LOGINS_TAB + "!A1:Q1", { valueInputOption: "RAW" });
     }
     return id;
   }
@@ -1386,7 +1414,7 @@ function loginsDeps_(cache) {
       const guardado = cache.get("lgs_list");
       if (guardado) return JSON.parse(guardado);
       if (!props.getProperty(REGISTRY_PROP)) return [];
-      const dados = Sheets.Spreadsheets.Values.get(planilha_(), LOGINS_TAB + "!A2:O", { valueRenderOption: "UNFORMATTED_VALUE" });
+      const dados = Sheets.Spreadsheets.Values.get(planilha_(), LOGINS_TAB + "!A2:Q", { valueRenderOption: "UNFORMATTED_VALUE" });
       const lista = (dados.values || []).map((linha, i) => ({ linha: i + 2, c: normalizar_(linha) })).filter((l) => l.c[LG.EMAIL] !== "");
       cache.put("lgs_list", JSON.stringify(lista), 20);
       return lista;
@@ -1395,11 +1423,11 @@ function loginsDeps_(cache) {
       const id = planilha_();
       const existentes = Sheets.Spreadsheets.Values.get(id, LOGINS_TAB + "!A2:A");
       const proxima = (existentes.values || []).length + 2;
-      Sheets.Spreadsheets.Values.update({ values: [normalizar_(c)] }, id, LOGINS_TAB + "!A" + proxima + ":O" + proxima, { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [normalizar_(c)] }, id, LOGINS_TAB + "!A" + proxima + ":Q" + proxima, { valueInputOption: "RAW" });
       cache.remove("lgs_list");
     },
     update: (linha, c) => {
-      Sheets.Spreadsheets.Values.update({ values: [normalizar_(c)] }, planilha_(), LOGINS_TAB + "!A" + linha + ":O" + linha, { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [normalizar_(c)] }, planilha_(), LOGINS_TAB + "!A" + linha + ":Q" + linha, { valueInputOption: "RAW" });
       cache.remove("lgs_list");
     },
   };
@@ -1413,6 +1441,26 @@ function chaveDeSenhaValida_(chave) {
 
 function emailValido_(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 120;
+}
+
+// "Login" (apelido escolhido pela pessoa): a separate, chosen identifier people
+// can sign in with instead of typing their e-mail every time (see
+// acaoPwBuscarEmailPorLogin_). It never replaces the e-mail, only stands in
+// for it when someone types it on the sign-in screen.
+function limparLogin_(valor) {
+  if (typeof valor !== "string") return "";
+  return (valor.normalize ? valor.normalize("NFKC") : valor).trim();
+}
+
+function loginValido_(login) {
+  return /^[A-Za-z0-9._-]{3,30}$/.test(login);
+}
+
+// true if some OTHER row already uses this login (case-insensitive). Pass the
+// row being edited's own line number so it does not collide with itself.
+function loginEmUso_(deps, login, linhaIgnorar) {
+  const chave = login.toLowerCase();
+  return deps.logins.list().some((l) => l.linha !== linhaIgnorar && String(l.c[LG.LOGIN] || "").toLowerCase() === chave);
 }
 
 function acharLogin_(deps, canon) {
@@ -1529,6 +1577,7 @@ function despacharPublico_(body, deps) {
       case "pwConfirmar": return acaoPwConfirmar_(deps, body);
       case "pwLogin": return acaoPwLogin_(deps, body);
       case "pwEsqueci": return acaoPwEsqueci_(deps, body);
+      case "pwBuscarEmailPorLogin": return acaoPwBuscarEmailPorLogin_(deps, body);
       default: return acaoPwRedefinir_(deps, body);
     }
   } catch (err) {
@@ -1545,6 +1594,10 @@ function acaoPwRegister_(deps, body) {
   if (!emailValido_(email)) throw new GatewayError_(400, "Informe um e-mail válido.");
   const nome = cleanText_(body.nome, 80, false);
   if (!nome) throw new GatewayError_(400, "Informe o seu nome.");
+  const login = limparLogin_(body.login);
+  if (!loginValido_(login)) throw new GatewayError_(400, "Escolha um login com 3 a 30 letras, números, ponto, hífen ou underline.");
+  const funcao = cleanText_(body.funcao, 60, false);
+  if (!funcao) throw new GatewayError_(400, "Informe a sua função na empresa.");
   const empresa = cleanText_(body.empresa, 80, false);
   const mensagem = cleanText_(body.mensagem, 500, true);
   if (!chaveDeSenhaValida_(body.chave)) throw new GatewayError_(400, "Senha inválida.");
@@ -1558,6 +1611,7 @@ function acaoPwRegister_(deps, body) {
       enviarEmailSeguro_(deps, email, "Finan.: você já tem cadastro", "Olá!\n\nRecebemos um pedido de cadastro com este e-mail, mas ele já existe.\n\nSe foi você, use \"Esqueci minha senha\" na tela de entrada para criar uma nova senha. Se não foi você, pode ignorar esta mensagem.\n");
       return { enviado: true };
     }
+    if (loginEmUso_(deps, login, atual ? atual.linha : null)) throw new GatewayError_(400, "Esse login já está em uso. Escolha outro.");
     if (!atual) {
       const lista = deps.logins.list();
       if (lista.length >= PW_MAX_LOGINS) throw new GatewayError_(503, "Limite de cadastros atingido.");
@@ -1572,6 +1626,8 @@ function acaoPwRegister_(deps, body) {
     c[LG.SIT] = SIT.EMAIL;
     c[LG.CRIADO] = new Date(deps.now()).toISOString();
     c[LG.DIGITADO] = email;
+    c[LG.LOGIN] = login;
+    c[LG.FUNCAO] = funcao;
     definirSenha_(secrets, deps, c, body.chave);
     c[LG.CODIGO] = hashDoCodigo_(secrets, canon, codigo);
     c[LG.CODIGO_EXP] = deps.now() + PW_CODE_MS;
@@ -1593,16 +1649,32 @@ function acaoPwConfirmar_(deps, body) {
     if (!login || login.c[LG.SIT] !== SIT.EMAIL) throw new GatewayError_(400, "Código incorreto ou expirado. Peça um novo.");
     conferirCodigo_(deps, login, canon, codigo, secrets);
     const c = login.c.slice();
-    c[LG.SIT] = SIT.APROVACAO;
     c[LG.CODIGO] = "";
     c[LG.CODIGO_EXP] = "";
     c[LG.CODIGO_TENT] = 0;
+    // A Master already authorized this e-mail (it is in some company's
+    // Usuários): the e-mail code just confirmed above is this flow's own
+    // proof of ownership, so there is nothing left for the system
+    // administrator to approve — skip straight to Ativo.
+    if (autorizadoEmAlgumaEmpresa_(deps, canon)) {
+      c[LG.SIT] = SIT.ATIVO;
+      c[LG.DECIDIDO] = new Date(deps.now()).toISOString();
+      deps.logins.update(login.linha, c);
+      enviarEmailSeguro_(
+        deps,
+        limparEmail_(c[LG.DIGITADO]),
+        "Finan.: seu login e senha já estão liberados",
+        "Olá, " + c[LG.NOME] + ".\n\nComo este e-mail já era autorizado por uma empresa no Finan., seu login e senha já estão liberados — não é preciso esperar o administrador do sistema. Entre em " + deps.config.APP_URL + " com e-mail (ou login: " + c[LG.LOGIN] + ") e a senha que você criou.\n"
+      );
+      return { situacao: SIT.ATIVO };
+    }
+    c[LG.SIT] = SIT.APROVACAO;
     deps.logins.update(login.linha, c);
     enviarEmailSeguro_(
       deps,
       emailsDoSistema_(deps),
       "Finan.: novo login com senha para aprovar — " + c[LG.NOME],
-      "Um novo login com e-mail e senha foi criado e o e-mail já foi confirmado.\n\nNome: " + c[LG.NOME] + "\nE-mail: " + c[LG.DIGITADO] + "\nEmpresa: " + (c[LG.EMPRESA] || "(não informada)") + "\nMensagem: " + (c[LG.MSG] || "(sem mensagem)") + "\n\nPara liberar (ou recusar), entre em " + deps.config.APP_URL + " e abra o Painel do sistema > Logins com senha.\n"
+      "Um novo login com e-mail e senha foi criado e o e-mail já foi confirmado.\n\nNome: " + c[LG.NOME] + "\nLogin: " + c[LG.LOGIN] + "\nFunção: " + (c[LG.FUNCAO] || "(não informada)") + "\nE-mail: " + c[LG.DIGITADO] + "\nEmpresa: " + (c[LG.EMPRESA] || "(não informada)") + "\nMensagem: " + (c[LG.MSG] || "(sem mensagem)") + "\n\nPara liberar (ou recusar), entre em " + deps.config.APP_URL + " e abra o Painel do sistema > Logins com senha.\n"
     );
     return { situacao: SIT.APROVACAO };
   });
@@ -1638,6 +1710,29 @@ function acaoPwLogin_(deps, body) {
     deps.logins.update(atual.linha, c);
   });
   return { token: sessao.token, expiraEm: sessao.expiraEm, email: limparEmail_(login.c[LG.DIGITADO]), nome: String(login.c[LG.NOME] || "") };
+}
+
+// Resolves a chosen "login" (username) to the real e-mail, so the browser can
+// derive the PBKDF2 key with the right salt (the key derivation needs the
+// e-mail — see js/senha.js — and the person typed a username instead). Same
+// generic failure + lockout as pwLogin itself: this must not reveal whether a
+// login exists any more precisely than "e-mail ou senha incorretos" already does.
+function acaoPwBuscarEmailPorLogin_(deps, body) {
+  const generico = () => new GatewayError_(403, "E-mail ou senha incorretos.");
+  const login = limparLogin_(body.login);
+  if (!login) throw generico();
+  const chaveFalhas = "pwlookup_" + login.toLowerCase();
+  const falhas = Number(deps.cache.get(chaveFalhas) || 0);
+  if (falhas >= PW_MAX_FAILS) throw new GatewayError_(429, "Muitas tentativas. Aguarde 15 minutos e tente de novo.");
+  const encontrado = deps.logins.list().filter(
+    (l) => l.c[LG.SIT] === SIT.ATIVO && String(l.c[LG.LOGIN] || "").toLowerCase() === login.toLowerCase()
+  )[0];
+  if (!encontrado) {
+    deps.cache.put(chaveFalhas, String(falhas + 1), PW_LOCK_SECONDS);
+    throw generico();
+  }
+  deps.cache.remove(chaveFalhas);
+  return { email: limparEmail_(encontrado.c[LG.DIGITADO]) };
 }
 
 function acaoPwEsqueci_(deps, body) {
@@ -1708,10 +1803,65 @@ function acaoPwTrocarSenha_(deps, email, sessaoSenha, body) {
   });
 }
 
+// Offered right after a Google sign-in to someone a company Master already
+// authorized (is in that company's Usuários) but who has no e-mail+senha
+// login yet — so they stop having to redo the Google flow every ~hour (see
+// CLAUDE.md "Manter conectado..."). Google itself already proved the e-mail,
+// and the Master's own act of listing it already is the approval, so this
+// activates immediately: no e-mail code, no system-administrator review.
+// Deliberately Google-session only (never a password session calling this on
+// itself) and deliberately re-checks authorization server-side even though
+// the client only shows this screen after already confirming it with "me" —
+// never trust the client's reason for calling an action.
+function actionCompletarCadastro_(deps, email, sessaoSenha, body) {
+  if (sessaoSenha) throw new GatewayError_(400, "Você já entra com e-mail e senha.");
+  const canon = canonEmail_(email);
+  if (!autorizadoEmAlgumaEmpresa_(deps, canon)) throw denied_();
+
+  const nome = cleanText_(body.nome, 80, false);
+  if (!nome) throw new GatewayError_(400, "Informe o seu nome.");
+  const login = limparLogin_(body.login);
+  if (!loginValido_(login)) throw new GatewayError_(400, "Escolha um login com 3 a 30 letras, números, ponto, hífen ou underline.");
+  const funcao = cleanText_(body.funcao, 60, false);
+  if (!funcao) throw new GatewayError_(400, "Informe a sua função na empresa.");
+  if (!chaveDeSenhaValida_(body.chave)) throw new GatewayError_(400, "Senha inválida.");
+
+  return deps.lock(() => {
+    const secrets = deps.secrets.get();
+    const existente = acharLogin_(deps, canon);
+    if (existente && existente.c[LG.SIT] === SIT.ATIVO) throw new GatewayError_(400, "Você já tem um login e senha ativos.");
+    if (loginEmUso_(deps, login, existente ? existente.linha : null)) throw new GatewayError_(400, "Esse login já está em uso. Escolha outro.");
+    const c = existente ? existente.c.slice() : LOGIN_HEADERS.map(() => "");
+    c[LG.EMAIL] = canon;
+    c[LG.NOME] = nome;
+    c[LG.LOGIN] = login;
+    c[LG.FUNCAO] = funcao;
+    c[LG.SIT] = SIT.ATIVO;
+    c[LG.CRIADO] = c[LG.CRIADO] || new Date(deps.now()).toISOString();
+    c[LG.DECIDIDO] = new Date(deps.now()).toISOString();
+    c[LG.DIGITADO] = email;
+    c[LG.CODIGO] = "";
+    c[LG.CODIGO_EXP] = "";
+    c[LG.CODIGO_TENT] = 0;
+    definirSenha_(secrets, deps, c, body.chave);
+    if (existente) deps.logins.update(existente.linha, c);
+    else deps.logins.add(c);
+    enviarEmailSeguro_(
+      deps,
+      email,
+      "Finan.: login e senha criados",
+      "Olá, " + nome + "!\n\nAgora você também pode entrar no Finan. com e-mail (ou login: " + login + ") e senha, além da sua conta Google.\n"
+    );
+    return { criado: true };
+  });
+}
+
 function resumoDoLogin_(l) {
   return {
     email: limparEmail_(l.c[LG.DIGITADO]),
     nome: String(l.c[LG.NOME] || ""),
+    login: String(l.c[LG.LOGIN] || ""),
+    funcao: String(l.c[LG.FUNCAO] || ""),
     empresa: String(l.c[LG.EMPRESA] || ""),
     mensagem: String(l.c[LG.MSG] || ""),
     situacao: String(l.c[LG.SIT]),

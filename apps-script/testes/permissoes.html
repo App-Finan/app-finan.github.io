@@ -484,7 +484,7 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   const K = (c) => (c.repeat(43)).slice(0, 43);            // a "derived key" as the browser would send
   const SENHA1 = K("A"), SENHA2 = K("B"), SENHA3 = K("C");
   function mundo() {
-    const w = { agora: 1000000000000, linhas: [], correios: [], contador: 0, cacheMap: {} };
+    const w = { agora: 1000000000000, linhas: [], correios: [], contador: 0, contadorLogin: 0, cacheMap: {} };
     const state = freshState();
     w.state = state;
     w.deps = function () {
@@ -507,7 +507,7 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
     };
     w.chama = (corpo) => { try { return { ok: true, data: handleRequest(corpo, w.deps()) }; } catch (e) { return { ok: false, status: e.status, msg: e.message, cru: e }; } };
     w.ultimoCodigo = (para) => { const m = w.correios.filter((x) => x.to === para).pop(); const r = m && /: (\d{6})\b/.exec(m.body); return r ? r[1] : null; };
-    w.cadastrar = (email, chave, extra) => w.chama(Object.assign({ action: "pwRegister", email: email, nome: "Maria Teste", empresa: "Ipanema", mensagem: "Oi", chave: chave || SENHA1 }, extra || {}));
+    w.cadastrar = (email, chave, extra) => w.chama(Object.assign({ action: "pwRegister", email: email, nome: "Maria Teste", login: "login" + (++w.contadorLogin), funcao: "Financeiro", empresa: "Ipanema", mensagem: "Oi", chave: chave || SENHA1 }, extra || {}));
     w.confirmar = (email) => w.chama({ action: "pwConfirmar", email: email, codigo: w.ultimoCodigo(email) });
     w.aprovar = (email) => w.chama({ token: "admin", action: "pwDecidir", email: email, acao: "aprovar" });
     w.entrar = (email, chave) => w.chama({ action: "pwLogin", email: email, chave: chave || SENHA1 });
@@ -535,7 +535,7 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   w.cadastrar(EM);
   T(w.cadastrar(EM).status === 429, "a second request within a minute is refused (no e-mail spam)");
   for (let i = 0; i < 6; i += 1) { w.agora += 61000; w.cadastrar(EM); }
-  T(w.chama({ action: "pwRegister", email: EM, nome: "N", chave: SENHA1 }).status === 429 && w.correios.length <= 5, "at most 5 e-mails per address in 6 hours");
+  T(w.chama({ action: "pwRegister", email: EM, nome: "N", login: "outrologin", funcao: "F", chave: SENHA1 }).status === 429 && w.correios.length <= 5, "at most 5 e-mails per address in 6 hours");
   w = mundo();
   let bloqueou = 0;
   for (let i = 0; i < 70; i += 1) { const r = w.cadastrar("p" + i + "@x.com"); if (r.status === 429) bloqueou += 1; }
@@ -701,18 +701,64 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   w = mundo(); w.pronto(ADMIN_EMAIL, SENHA1);
   T(w.chama({ token: w.entrar(ADMIN_EMAIL).data.token, action: "pwListar" }).ok, "an administrator who signs in with a password gets the administrator's powers");
 
+  // ---- a Master-authorized e-mail skips the system administrator's approval
+  w = mundo(); w.cadastrar("viz@x.com"); w.agora += 61000;
+  const confVizNoAutoApprove = w.confirmar("viz@x.com");
+  T(confVizNoAutoApprove.ok && confVizNoAutoApprove.data.situacao === SIT.ATIVO, "pwConfirmar activates immediately for an e-mail already authorized in a company's Usuários (viz@x.com in Ipanema)");
+  T(w.entrar("viz@x.com").ok, "...and the password already works, no administrator action needed");
+  T(w.correios.every((m) => m.to === "viz@x.com"), "...and no 'awaiting approval' e-mail went to the administrator");
+  w = mundo(); w.cadastrar("nobody@x.com"); w.agora += 61000;
+  const confNobody = w.confirmar("nobody@x.com");
+  T(confNobody.ok && confNobody.data.situacao === SIT.APROVACAO, "an e-mail that is NOT authorized anywhere still waits for the administrator, as before");
+
+  // ---- "login próprio": a chosen username distinct from the e-mail, and
+  // completing a password for a Google-authorized account (completarCadastroAutorizado)
+  w = mundo();
+  T(w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "vi", funcao: "Vendas", chave: SENHA1 }).status === 400, "a login shorter than 3 characters is refused");
+  T(w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "tem espaço", funcao: "Vendas", chave: SENHA1 }).status === 400, "a login with a space is refused");
+  T(w.chama({ token: "nobody", action: "completarCadastroAutorizado", nome: "N", login: "naoautorizado", funcao: "X", chave: SENHA1 }).status === 403, "an e-mail not authorized in any company cannot complete this (even with a valid Google token)");
+  const completou = w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz Completo", login: "vizlogin", funcao: "Vendedora", chave: SENHA1 });
+  T(completou.ok && completou.data.criado === true, "an already-authorized Google account creates its password immediately (no e-mail code, no administrator approval)");
+  T(w.entrar("viz@x.com", SENHA1).ok, "...and can now sign in with e-mail + that password");
+  T(w.chama({ token: "viz", action: "me" }).data.temSenhaAtiva === true, "'me' now reports this account already has an active password login");
+  T(w.chama({ token: "edi", action: "me" }).data.temSenhaAtiva === false, "...while an authorized account that never completed it still reports false");
+  T(w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "outronome", funcao: "X", chave: SENHA2 }).status === 400, "cannot complete it a second time once already active");
+  T(w.chama({ token: "fs1.outro.1.1.x", action: "completarCadastroAutorizado", nome: "N", login: "algumlogin", funcao: "X", chave: SENHA1 }).status === 401, "a malformed password-session token is rejected the normal way, never treated as a Google token");
+  w = mundo(); const sessaoSenhaExistente = w.pronto(EM, SENHA1).data.token;
+  T(w.chama({ token: sessaoSenhaExistente, action: "completarCadastroAutorizado", nome: "N", login: "x1", funcao: "X", chave: SENHA2 }).status === 400, "a person who already signs in with e-mail + password cannot use this (it is for Google-only accounts)");
+
+  // ---- the chosen login also works as an alternative to typing the e-mail
+  w = mundo(); w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "vizlogin", funcao: "Vendas", chave: SENHA1 });
+  const achado = w.chama({ action: "pwBuscarEmailPorLogin", login: "vizlogin" });
+  T(achado.ok && achado.data.email === "viz@x.com", "looking up a registered login returns the real e-mail (needed to derive the password key with the right salt)");
+  T(w.chama({ action: "pwBuscarEmailPorLogin", login: "VIZLOGIN" }).data.email === "viz@x.com", "the lookup is case-insensitive");
+  const naoAchou = w.chama({ action: "pwBuscarEmailPorLogin", login: "ninguemtem" });
+  T(naoAchou.status === 403 && naoAchou.msg === "E-mail ou senha incorretos.", "an unknown login gets the exact same generic message as a wrong e-mail/password (no account-existence hint)");
+  w.cadastrar("pendente@x.com", SENHA2, { login: "aindapendente" });
+  T(w.chama({ action: "pwBuscarEmailPorLogin", login: "aindapendente" }).status === 403, "a login that exists but is not Ativo yet (still awaiting e-mail confirmation/approval) is not resolved either");
+  for (let i = 0; i < 5; i += 1) w.chama({ action: "pwBuscarEmailPorLogin", login: "ninguemtem" });
+  T(w.chama({ action: "pwBuscarEmailPorLogin", login: "ninguemtem" }).status === 429, "repeated wrong lookups are throttled the same way as wrong passwords");
+
+  // ---- "login" is unique across all accounts
+  w = mundo(); w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "sojeu", funcao: "Vendas", chave: SENHA1 });
+  w.agora += 61000;
+  const colisao = w.cadastrar("outraconta@x.com", SENHA2, { login: "sojeu" });
+  T(colisao.status === 400 && /login já está em uso/.test(colisao.msg), "pwRegister refuses a login that is already taken by someone else");
+  T(w.chama({ token: "viz", action: "completarCadastroAutorizado", nome: "Viz", login: "sojeu", funcao: "X", chave: SENHA2 }).status === 400, "...even if the collision is with the caller's own already-active login, it is refused by the 'already active' check first, not silently allowed");
+  T(acharLogin_ !== undefined && loginValido_("abc") && !loginValido_("ab") && !loginValido_("a b") && loginValido_("a.b-c_9") && !loginValido_("a@b"), "loginValido_ accepts letters/numbers/._- , 3-30 chars, and rejects spaces or '@'");
+
   // ---- failures never leak internals
   w = mundo();
   const dRuim = w.deps(); dRuim.logins.list = () => { throw new Error("SEGREDO interno da planilha 1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd"); };
   const vaz = (() => { try { handleRequest({ action: "pwLogin", email: EM, chave: SENHA1 }, dRuim); return null; } catch (e) { return e; } })();
   T(vaz instanceof GatewayError_ && vaz.status === 500 && !/SEGREDO|1AbCd|Detalhe/.test(vaz.message), "an unexpected failure in a public action reveals nothing internal");
   const dMail = w.deps(); dMail.mail = { send: () => { throw new Error("mail down"); } };
-  const semMail = (() => { try { handleRequest({ action: "pwRegister", email: "q@x.com", nome: "Q", chave: SENHA1 }, dMail); return null; } catch (e) { return e; } })();
+  const semMail = (() => { try { handleRequest({ action: "pwRegister", email: "q@x.com", nome: "Q", login: "loginq", funcao: "F", chave: SENHA1 }, dMail); return null; } catch (e) { return e; } })();
   T(semMail && semMail.status === 503 && /e-mail/.test(semMail.message), "if the code cannot be e-mailed the person is told to try again (no false success)");
   // the Google path is untouched
   T(w.chama({ token: "mas", action: "me" }).ok && w.chama({ token: "zzz", action: "me" }).status === 401, "Google sign-in still works exactly as before, and bad Google tokens are still refused");
   // secrets are created once and only in private properties (real dependency shape)
-  T(typeof secretsDeps_ === "function" && typeof loginsDeps_ === "function" && PW_PUBLIC_ACTIONS.length === 5, "the real dependencies exist (script properties + registry sheet)");
+  T(typeof secretsDeps_ === "function" && typeof loginsDeps_ === "function" && PW_PUBLIC_ACTIONS.length === 6, "the real dependencies exist (script properties + registry sheet)");
 })();
 
 // --- access requests (anyone signed in with Google may ask; only the admin sees/answers)
