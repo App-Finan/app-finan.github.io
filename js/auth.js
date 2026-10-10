@@ -10,6 +10,15 @@ const SESSION_ISSUED_KEY = "ipanema_gis_token_issued_at";
 // A session of the e-mail + password login (not Google): which kind, and who.
 const SESSION_KIND_KEY = "ipanema_auth_kind";
 const SESSION_EMAIL_KEY = "ipanema_auth_email";
+// "Manter conectado neste aparelho" — a password session opted into surviving
+// a closed tab/app, kept in localStorage (device-wide, like the theme/sidebar
+// prefs) instead of sessionStorage. Google logins never use this: the token
+// itself only ever lasts ~1h regardless of where it's stored, and the
+// sessionStorage-only rule for it is a deliberate security choice (see
+// CLAUDE.md's Security posture) that this feature does not touch.
+const REMEMBER_TOKEN_KEY = "financegold_lembrar_token";
+const REMEMBER_EXPIRES_KEY = "financegold_lembrar_expira_em";
+const REMEMBER_EMAIL_KEY = "financegold_lembrar_email";
 
 function waitForGoogleIdentity(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
@@ -42,7 +51,11 @@ function saveTokenToSession(token, expiresInSeconds, scopes) {
   }
 }
 
-// Returns a still-valid token from this tab's session, or null.
+// Returns a still-valid token from this tab's session, or null. Falls back to
+// a "lembrada" (remembered) password session in localStorage when this tab's
+// own sessionStorage has nothing — e.g. the tab/app was closed and reopened —
+// and, when found, promotes it into sessionStorage too, so everything else
+// (tipoDeSessao, emailDaSessao, signOut...) keeps reading from one place.
 function loadValidTokenFromSession() {
   try {
     const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
@@ -55,12 +68,19 @@ function loadValidTokenFromSession() {
   } catch (err) {
     console.warn("Não foi possível ler a sessão:", err);
   }
+  const lembrada = loadRememberedSenhaSession();
+  if (lembrada) {
+    saveSenhaSession(lembrada.token, lembrada.expiresAt, lembrada.email); // this tab's sessionStorage only
+    accessToken = lembrada.token;
+    return lembrada.token;
+  }
   return null;
 }
 
 // Keeps a session of the password login for this tab (same keys the reload
 // logic already reads, plus the kind and the e-mail: there is no Google to ask).
-function saveSenhaSession(token, expiraEmMs, email) {
+// "lembrar" also keeps it in localStorage (see loadValidTokenFromSession above).
+function saveSenhaSession(token, expiraEmMs, email, lembrar) {
   try {
     sessionStorage.setItem(SESSION_TOKEN_KEY, token);
     sessionStorage.setItem(SESSION_EXPIRES_KEY, String(expiraEmMs));
@@ -71,7 +91,42 @@ function saveSenhaSession(token, expiraEmMs, email) {
   } catch (err) {
     console.warn("Não foi possível salvar a sessão:", err);
   }
+  if (lembrar) saveRememberedSenhaSession(token, expiraEmMs, email);
   accessToken = token;
+}
+
+function saveRememberedSenhaSession(token, expiresAt, email) {
+  try {
+    localStorage.setItem(REMEMBER_TOKEN_KEY, token);
+    localStorage.setItem(REMEMBER_EXPIRES_KEY, String(expiresAt));
+    localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+  } catch (err) {
+    console.warn("Não foi possível salvar a sessão lembrada:", err);
+  }
+}
+
+function loadRememberedSenhaSession() {
+  try {
+    const token = localStorage.getItem(REMEMBER_TOKEN_KEY);
+    const expiresAt = Number(localStorage.getItem(REMEMBER_EXPIRES_KEY) || 0);
+    const safetyMarginMs = 30_000;
+    if (token && expiresAt > Date.now() + safetyMarginMs) {
+      return { token, expiresAt, email: localStorage.getItem(REMEMBER_EMAIL_KEY) || "" };
+    }
+  } catch (err) {
+    console.warn("Não foi possível ler a sessão lembrada:", err);
+  }
+  return null;
+}
+
+function clearRememberedSenhaSession() {
+  try {
+    localStorage.removeItem(REMEMBER_TOKEN_KEY);
+    localStorage.removeItem(REMEMBER_EXPIRES_KEY);
+    localStorage.removeItem(REMEMBER_EMAIL_KEY);
+  } catch (err) {
+    // ignore
+  }
 }
 
 function tipoDeSessao() {
@@ -121,6 +176,7 @@ function clearTokenSession() {
   } catch (err) {
     // ignore
   }
+  clearRememberedSenhaSession();
   accessToken = null;
 }
 

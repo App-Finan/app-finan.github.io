@@ -582,6 +582,30 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   T(JSON.stringify(en.data).indexOf(w.linhas[0][LG.SAL]) === -1 && JSON.stringify(en.data).indexOf(w.linhas[0][LG.VER]) === -1, "the answer contains no salt or verifier");
   T(w.entrar("MARIATESTE@gmail.com").ok && w.entrar("maria.teste@GMAIL.com").ok, "the login works with the e-mail written in other ways (Gmail dots / capitals)");
   T(w.entrar(EM, SENHA2).status === 403 && w.entrar(EM, "curta").status === 403 && w.entrar("", SENHA1).status === 403 && w.chama({ action: "pwLogin", email: EM }).status === 403, "wrong, malformed or missing passwords are all refused with the same message");
+
+  // ---- "manter conectado neste aparelho" (2026-10-10): lembrar:true on pwLogin
+  // issues a 30-day session instead of the normal 12h; pwTrocarSenha honours the
+  // same flag, so a password change never silently drops a remembered device
+  // nor remembers one that never asked for it. A fresh world of its own — the
+  // password changes below must not bump the version out from under `tok`,
+  // which the rest of this suite keeps using after this point.
+  {
+    const wL = mundo();
+    wL.pronto(EM, SENHA1);
+    const longaReal = wL.chama({ action: "pwLogin", email: EM, chave: SENHA1, lembrar: true });
+    T(longaReal.ok && longaReal.data.expiraEm === wL.agora + 30 * 24 * 3600000, "lembrar:true issues a 30-day session instead of the normal 12h");
+    const curtaDeNovo = wL.chama({ action: "pwLogin", email: EM, chave: SENHA1, lembrar: false });
+    T(curtaDeNovo.ok && curtaDeNovo.data.expiraEm === wL.agora + 12 * 3600000, "lembrar:false (or omitted) keeps the normal 12h session");
+    const trocaLembrada = wL.chama({ token: longaReal.data.token, action: "pwTrocarSenha", atual: SENHA1, nova: SENHA2, lembrar: true });
+    T(trocaLembrada.ok && trocaLembrada.data.expiraEm === wL.agora + 30 * 24 * 3600000, "pwTrocarSenha with lembrar:true keeps issuing a 30-day session");
+    const trocaCurta = wL.chama({ token: trocaLembrada.data.token, action: "pwTrocarSenha", atual: SENHA2, nova: SENHA1 });
+    T(trocaCurta.ok && trocaCurta.data.expiraEm === wL.agora + 12 * 3600000, "pwTrocarSenha without lembrar falls back to the normal 12h session");
+    T(wL.chama({ token: trocaCurta.data.token, action: "me" }).ok, "the password is back to SENHA1 and the new 12h session works");
+    // a long session is killed exactly like a short one: changing the password
+    // again (even with no lembrar on that later change) invalidates it via the version bump
+    T(wL.chama({ token: longaReal.data.token, action: "me" }).status === 401, "the earlier 30-day token is dead too — version bump kills every outstanding session, long or short");
+  }
+
   // the session works like a Google identity: access is decided by the company's Usuários tab
   const tok = en.data.token;
   const meSem = w.chama({ token: tok, action: "me" });

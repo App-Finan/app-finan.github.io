@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-08-erp-fase1";
+const GATEWAY_VERSION = "2026-10-10-manter-conectado";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -1208,6 +1208,12 @@ const LG = { EMAIL: 0, NOME: 1, EMPRESA: 2, MSG: 3, SIT: 4, SAL: 5, VER: 6, VERS
 const SIT = { EMAIL: "Aguardando e-mail", APROVACAO: "Aguardando aprovação", ATIVO: "Ativo", RECUSADO: "Recusado", BLOQUEADO: "Bloqueado" };
 const PW_PUBLIC_ACTIONS = ["pwRegister", "pwConfirmar", "pwLogin", "pwEsqueci", "pwRedefinir"];
 const PW_SESSION_MS = 12 * 60 * 60 * 1000;
+// "Manter conectado neste aparelho" (pwLogin's "lembrar" flag): a longer
+// session, kept in the browser's localStorage instead of sessionStorage (see
+// js/auth.js) so it survives closing the tab/app. Same kill-switch as any
+// other session: changing the password or an admin blocking the login bumps
+// LG.VERSAO, which invalidates every outstanding token at once, short or long.
+const PW_SESSION_LONGA_MS = 30 * 24 * 60 * 60 * 1000;
 const PW_CODE_MS = 15 * 60 * 1000;
 const PW_CODE_MAX_TRIES = 5;
 const PW_MAX_FAILS = 5;
@@ -1484,9 +1490,9 @@ function emailsDoSistema_(deps) {
 
 // ---- sessions ----------------------------------------------------------------
 
-function emitirSessao_(deps, login) {
+function emitirSessao_(deps, login, duracaoMs) {
   const secrets = deps.secrets.get();
-  const expira = deps.now() + PW_SESSION_MS;
+  const expira = deps.now() + (duracaoMs || PW_SESSION_MS);
   const emailHex = hexDeBytes_(utf8Bytes_(limparEmail_(login.c[LG.DIGITADO])));
   const versao = Number(login.c[LG.VERSAO]);
   const assinatura = hmacSha256Hex_(secrets.sessionKey, "s|" + emailHex + "|" + expira + "|" + versao);
@@ -1623,7 +1629,7 @@ function acaoPwLogin_(deps, body) {
   if (situacao === SIT.EMAIL) throw new GatewayError_(403, "Falta confirmar o seu e-mail. Use \"Criar acesso\" de novo para receber outro código.");
   if (situacao === SIT.APROVACAO) throw new GatewayError_(403, "Seu cadastro está aguardando a aprovação do administrador. Você receberá um e-mail quando for liberado.");
   if (situacao !== SIT.ATIVO) throw new GatewayError_(403, "Este acesso não está liberado. Fale com o administrador.");
-  const sessao = emitirSessao_(deps, login);
+  const sessao = emitirSessao_(deps, login, body.lembrar === true ? PW_SESSION_LONGA_MS : PW_SESSION_MS);
   deps.lock(() => {
     const atual = acharLogin_(deps, canon);
     if (!atual) return;
@@ -1697,7 +1703,7 @@ function acaoPwTrocarSenha_(deps, email, sessaoSenha, body) {
     definirSenha_(secrets, deps, c, body.nova);
     deps.logins.update(login.linha, c);
     enviarEmailSeguro_(deps, limparEmail_(c[LG.DIGITADO]), "Finan.: sua senha foi alterada", "Olá, " + c[LG.NOME] + ".\n\nA senha do seu acesso ao Finan. acabou de ser alterada. Se não foi você, peça imediatamente ao administrador para bloquear o seu acesso.\n");
-    const sessao = emitirSessao_(deps, { c: c });
+    const sessao = emitirSessao_(deps, { c: c }, body.lembrar === true ? PW_SESSION_LONGA_MS : PW_SESSION_MS);
     return { token: sessao.token, expiraEm: sessao.expiraEm };
   });
 }

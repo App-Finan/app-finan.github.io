@@ -790,9 +790,12 @@ async function seguirComConta(token, email) {
 }
 
 // A successful e-mail + password login: keep the session for this tab and continue
-// exactly as after a Google login (js/login-senha.js calls this).
-function entrarComSenha(resposta) {
-  saveSenhaSession(resposta.token, resposta.expiraEm, resposta.email);
+// exactly as after a Google login (js/login-senha.js calls this). "lembrar" also
+// keeps it in localStorage, surviving a closed tab/app, up to the longer
+// expiry the server already issued (see acaoPwLogin_ in Code.gs) — Google
+// logins never offer this, see the note on saveTokenToSession.
+function entrarComSenha(resposta, lembrar) {
+  saveSenhaSession(resposta.token, resposta.expiraEm, resposta.email, lembrar);
   handleSignedIn(resposta.token);
 }
 

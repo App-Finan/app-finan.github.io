@@ -3264,6 +3264,20 @@ td select {
   text-align: center;
 }
 
+.auth-lembrar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.auth-lembrar input {
+  width: auto;
+  margin: 0;
+}
+
 .campo-senha {
   position: relative;
 }

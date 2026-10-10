@@ -125,6 +125,7 @@ async function enviarLoginSenha(evento) {
   evento.preventDefault();
   const email = porId("login-email").value.trim();
   const senha = porId("login-senha").value;
+  const lembrar = porId("login-lembrar").checked;
   if (!email || !senha) return dizer("login-senha-status", "Informe o e-mail e a senha.", true);
   if (!emailParecido(email)) return dizer("login-senha-status", "Informe um e-mail válido.", true);
   const botao = porId("btn-entrar-senha");
@@ -132,10 +133,10 @@ async function enviarLoginSenha(evento) {
   dizer("login-senha-status", "Verificando...", false);
   try {
     const chave = await derivarChaveDeSenha(senha, email);
-    const resposta = await gatewayCall("pwLogin", { email, chave }, null);
+    const resposta = await gatewayCall("pwLogin", { email, chave, lembrar }, null);
     porId("login-senha").value = "";
     dizer("login-senha-status", "", false);
-    entrarComSenha(resposta);
+    entrarComSenha(resposta, lembrar);
   } catch (err) {
     console.error(err);
     dizer("login-senha-status", mensagemDoErro(err), true);
@@ -326,11 +327,15 @@ async function enviarTrocaDeSenha(evento) {
   botao.disabled = true;
   dizer("trocar-senha-status", "Salvando...", false);
   try {
+    // Keep whatever "manter conectado" state this session already had — a
+    // password change must not silently drop someone out of a remembered
+    // device, nor remember a device that never asked for it.
+    const lembrar = Boolean(loadRememberedSenhaSession());
     const chaveAtual = await derivarChaveDeSenha(atual, email);
     const chaveNova = await derivarChaveDeSenha(nova, email);
-    const resposta = await gatewayCall("pwTrocarSenha", { atual: chaveAtual, nova: chaveNova }, accessToken);
+    const resposta = await gatewayCall("pwTrocarSenha", { atual: chaveAtual, nova: chaveNova, lembrar }, accessToken);
     // The old session ended with the change; the one returned keeps this person signed in.
-    saveSenhaSession(resposta.token, resposta.expiraEm, emailDaSessao());
+    saveSenhaSession(resposta.token, resposta.expiraEm, emailDaSessao(), lembrar);
     limparCamposDeSenha(porId("trocar-senha-form"));
     dizer("trocar-senha-status", "Senha alterada. Os outros aparelhos foram desconectados.", false);
   } catch (err) {
