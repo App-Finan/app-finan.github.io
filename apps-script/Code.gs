@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-10-login-proprio-e-autoaprovacao";
+const GATEWAY_VERSION = "2026-10-10-lembretes-diarios-agendados";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -1151,11 +1151,13 @@ function montarCorpoLembretes_(empresa, pendentes, hoje) {
   return partes.join("");
 }
 
-function actionVerificarLembretes_(deps, access, spreadsheet, body) {
-  // Only people who could actually act on the bill trigger (and receive) a
-  // check — a Visualizador reading Contas a Pagar does not spend mail quota.
-  if (access.perfil !== ROLE_EDITOR && access.perfil !== ROLE_MASTER) throw denied_();
-
+// The actual scan-and-mail work, with no notion of "who is asking" — shared
+// by the per-login path (actionVerificarLembretes_, role-gated below) and the
+// daily time-based trigger (verificarLembretesTodasEmpresasAgendado, which has
+// no caller to gate: it IS the system). Dedup is per-row ("Avisado em"), so
+// calling this twice in the same day (once from a login, once from the
+// trigger) never double-mails — the second call just finds nothing left to do.
+function executarVerificacaoLembretes_(deps, spreadsheetId, empresaNome) {
   const hoje = hojeSerial_(deps);
   const limite = hoje + CONTAS_AVISO_DIAS_ANTES;
   const pendentes = { pagar: [], receber: [] };
@@ -1163,7 +1165,7 @@ function actionVerificarLembretes_(deps, access, spreadsheet, body) {
   [CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB].forEach((tab) => {
     let rows;
     try {
-      rows = deps.sheets.getValues(body.spreadsheetId, "'" + tab + "'!A2:J", "UNFORMATTED_VALUE");
+      rows = deps.sheets.getValues(spreadsheetId, "'" + tab + "'!A2:J", "UNFORMATTED_VALUE");
     } catch (err) {
       return; // tab not created yet on this company — nothing to check
     }
@@ -1189,13 +1191,13 @@ function actionVerificarLembretes_(deps, access, spreadsheet, body) {
   const total = pendentes.pagar.length + pendentes.receber.length;
   if (total === 0) return { avisados: 0 };
 
-  const destinatarios = (loadUsuarios_(deps, body.spreadsheetId) || []).filter(
+  const destinatarios = (loadUsuarios_(deps, spreadsheetId) || []).filter(
     (u) => u.perfil === ROLE_EDITOR || u.perfil === ROLE_MASTER
   );
   if (destinatarios.length > 0) {
-    const corpo = montarCorpoLembretes_(spreadsheet.empresa, pendentes, hoje);
+    const corpo = montarCorpoLembretes_(empresaNome, pendentes, hoje);
     destinatarios.forEach((u) => {
-      enviarEmailSeguro_(deps, u.email, total + " conta(s) para olhar — " + spreadsheet.empresa, corpo);
+      enviarEmailSeguro_(deps, u.email, total + " conta(s) para olhar — " + empresaNome, corpo);
     });
   }
 
@@ -1205,11 +1207,55 @@ function actionVerificarLembretes_(deps, access, spreadsheet, body) {
       { tab: CONTAS_RECEBER_TAB, itens: pendentes.receber },
     ].forEach((grupo) => {
       grupo.itens.forEach((item) => {
-        deps.sheets.updateValues(body.spreadsheetId, "'" + grupo.tab + "'!J" + item.linha + ":J" + item.linha, [[hoje]]);
+        deps.sheets.updateValues(spreadsheetId, "'" + grupo.tab + "'!J" + item.linha + ":J" + item.linha, [[hoje]]);
       });
     });
     return { avisados: total };
   });
+}
+
+function actionVerificarLembretes_(deps, access, spreadsheet, body) {
+  // Only people who could actually act on the bill trigger (and receive) a
+  // check — a Visualizador reading Contas a Pagar does not spend mail quota.
+  if (access.perfil !== ROLE_EDITOR && access.perfil !== ROLE_MASTER) throw denied_();
+  return executarVerificacaoLembretes_(deps, body.spreadsheetId, spreadsheet.empresa);
+}
+
+// ---------------------------------------------------------------------------
+// Daily time-based trigger (requested 2026-10-10: the per-login check above
+// means a company nobody logs into around its due dates never gets mailed —
+// not good enough for a bill that matters, like a monthly accountant fee).
+// Install it ONCE from the Apps Script editor: select instalarGatilhoLembretes
+// and press Run. It is idempotent (removes any trigger it previously made for
+// this same function before adding a new one), so running it again after a
+// redeploy does not create duplicates — but it is still a manual, one-time
+// step per deployment (a fresh Apps Script project, or the account migration
+// described elsewhere in this file, needs it run again there).
+// ---------------------------------------------------------------------------
+
+function verificarLembretesTodasEmpresasAgendado() {
+  const deps = realDeps_();
+  const empresas = companyMap_(deps);
+  let totalAvisado = 0;
+  Object.keys(empresas).forEach((spreadsheetId) => {
+    try {
+      const resultado = executarVerificacaoLembretes_(deps, spreadsheetId, empresas[spreadsheetId].empresa);
+      totalAvisado += resultado.avisados;
+    } catch (err) {
+      // One company's sheet having a problem (quota, a renamed tab, Drive
+      // access pulled) must never stop the rest from being checked.
+      console.error("Lembretes — falhou para " + empresas[spreadsheetId].empresa + ": " + err.message);
+    }
+  });
+  console.log("Lembretes diários: " + totalAvisado + " conta(s) avisada(s) em " + Object.keys(empresas).length + " empresa(s).");
+}
+
+function instalarGatilhoLembretes() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "verificarLembretesTodasEmpresasAgendado") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("verificarLembretesTodasEmpresasAgendado").timeBased().everyDays(1).atHour(7).create();
+  console.log("Gatilho diário instalado: verificarLembretesTodasEmpresasAgendado, por volta das 7h.");
 }
 
 // ===========================================================================
