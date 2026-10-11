@@ -77,8 +77,10 @@ function montarRelatorioImpressao() {
   const end = parseInputDate(endInput, true);
   const filtered = filterByDateRange(allLancamentos, start, end);
 
-  // Header: empresa, período, when this snapshot was taken.
+  // Header: brand mark, empresa, período, when this snapshot was taken.
   const header = document.createElement("header");
+
+  const textos = document.createElement("div");
   const titulo = document.createElement("h1");
   titulo.textContent = `Relatório financeiro — ${sidebarEmpresa.textContent}`;
   const periodo = document.createElement("p");
@@ -87,9 +89,20 @@ function montarRelatorioImpressao() {
   const geradoEm = document.createElement("p");
   geradoEm.className = "relatorio-gerado-em";
   geradoEm.textContent = `Gerado em ${new Date().toLocaleString("pt-BR")}`;
-  header.appendChild(titulo);
-  header.appendChild(periodo);
-  header.appendChild(geradoEm);
+  textos.appendChild(titulo);
+  textos.appendChild(periodo);
+  textos.appendChild(geradoEm);
+
+  const marca = document.createElement("div");
+  marca.className = "relatorio-marca";
+  marca.appendChild(buildLogoMark(26));
+  const marcaTexto = document.createElement("span");
+  marcaTexto.className = "relatorio-marca-texto";
+  marcaTexto.textContent = "Finan.";
+  marca.appendChild(marcaTexto);
+
+  header.appendChild(textos);
+  header.appendChild(marca);
   host.appendChild(header);
 
   // Resumo do período — the same numbers as the Dashboard's main KPI tiles.

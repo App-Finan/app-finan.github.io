@@ -3484,31 +3484,75 @@ td select {
    @media print, where it's the ONLY thing visible — everything else in body
    (sidebar, topbar, whichever screen is active) is force-hidden regardless of
    app state, so printing never depends on what the person happened to have
-   open. Deliberately plain light/black here, ignoring both app themes: the
-   "Ouro" near-black look would waste ink and read poorly on paper. */
+   open. White paper, not the "Ouro" near-black screen look (would waste ink
+   and read poorly printed) — but still carries the app's own identity: the
+   same fonts, the mono "[ bracket ]" label convention every card/stat uses
+   on screen, and the brand mark, just in a print-safe gold. --relatorio-gold
+   is the exact value css/style.css's light theme already computed for gold
+   text on a light surface (--color-accent-text in [data-theme="light"]) —
+   reused as a literal hex, not var(--color-accent-text), so printing stays
+   right regardless of which theme (dark/"Papel") happens to be active on
+   screen at the time (that token would resolve to the bright dark-mode gold,
+   which fails contrast on white paper, in a dark-theme session). */
 .relatorio-impressao {
   display: none;
+  --relatorio-gold: #8a6410;
 }
 
 .relatorio-impressao header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.5rem;
-  border-bottom: 2px solid #000;
+  border-bottom: 2px solid var(--relatorio-gold);
   padding-bottom: 0.75rem;
+}
+
+.relatorio-marca {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.relatorio-marca .art-logo-svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* buildLogoMark()'s strokes are colored via .art-accent -> var(--color-accent),
+   which stays the same bright dark-mode gold in every on-screen theme (see
+   CLAUDE.md) and fails contrast on white paper. Override just here. */
+.relatorio-impressao .art-accent {
+  color: var(--relatorio-gold);
+}
+
+.relatorio-marca-texto {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--relatorio-gold);
 }
 
 .relatorio-impressao h1 {
   margin: 0 0 0.3rem;
-  font-size: 1.3rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: #000;
 }
 
 .relatorio-impressao .relatorio-periodo {
   margin: 0;
+  font-family: var(--font-mono);
   font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .relatorio-impressao .relatorio-gerado-em {
   margin: 0.2rem 0 0;
-  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
   color: #555;
 }
 
@@ -3517,13 +3561,25 @@ td select {
   break-inside: avoid;
 }
 
+/* Same "[ TÍTULO ]" convention as .card h2 / .stat-label on screen. */
 .relatorio-impressao h2 {
-  font-size: 0.95rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid #000;
+  letter-spacing: 0.08em;
+  color: var(--relatorio-gold);
+  border-bottom: 1px solid var(--relatorio-gold);
   padding-bottom: 0.25rem;
   margin: 0 0 0.6rem;
+}
+
+.relatorio-impressao h2::before {
+  content: "[ ";
+}
+
+.relatorio-impressao h2::after {
+  content: " ]";
 }
 
 .relatorio-stats-row {
@@ -3539,33 +3595,54 @@ td select {
 }
 
 .relatorio-stat-label {
-  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #555;
+  letter-spacing: 0.06em;
+  color: #666;
+}
+
+.relatorio-stat-label::before {
+  content: "[ ";
+}
+
+.relatorio-stat-label::after {
+  content: " ]";
 }
 
 .relatorio-stat-valor {
+  font-family: var(--font-mono);
   font-size: 1.1rem;
   font-weight: 700;
+  color: #000;
 }
 
 .relatorio-impressao table {
   width: 100%;
   border-collapse: collapse;
+  font-family: var(--font-body);
   font-size: 0.82rem;
 }
 
 .relatorio-impressao th,
 .relatorio-impressao td {
-  border: 1px solid #999;
+  border: 1px solid #ccc;
   padding: 0.3rem 0.5rem;
   text-align: left;
 }
 
 .relatorio-impressao th {
-  background: #eee;
+  background: rgba(138, 100, 16, 0.12);
+  color: var(--relatorio-gold);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   font-weight: 700;
+}
+
+.relatorio-impressao td {
+  font-family: var(--font-mono);
 }
 
 .relatorio-impressao td:not(:first-child),
