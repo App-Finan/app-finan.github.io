@@ -110,7 +110,7 @@ function buildSparkline(values, filled) {
   return svg;
 }
 
-function buildKpiTile({ label, labelExtra, value, icon, iconClass, trend, hero, invertTrendColor, spark, art }) {
+function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, art }) {
   const tile = document.createElement("div");
   tile.className = `stat-tile${hero ? " stat-tile-hero" : ""}`;
 
@@ -154,6 +154,24 @@ function buildKpiTile({ label, labelExtra, value, icon, iconClass, trend, hero, 
 
   tile.appendChild(top);
   tile.appendChild(valueEl);
+
+  // A second, smaller line under the main value for a related R$ figure
+  // (2026-10-11: the gold-weight tiles show grams, but not what that gold
+  // actually cost/brought in — requested as "together with the grams, just
+  // on another line" rather than a whole separate KPI tile).
+  if (subValue) {
+    const subEl = document.createElement("div");
+    subEl.className = "stat-subvalue";
+    const subLabelEl = document.createElement("span");
+    subLabelEl.className = "stat-subvalue-label";
+    subLabelEl.textContent = "Valor";
+    const subAmountEl = document.createElement("span");
+    subAmountEl.className = "stat-subvalue-amount";
+    subAmountEl.textContent = subValue;
+    subEl.appendChild(subLabelEl);
+    subEl.appendChild(subAmountEl);
+    tile.appendChild(subEl);
+  }
 
   if (trend !== null && trend !== undefined) {
     // The arrow/percentage always reflect the real change. The color reflects
@@ -239,6 +257,7 @@ function renderKpis(records, prevRecords, series) {
       label: vocab("kpiCompra"),
       labelExtra: vocab("kpiCompraExtra"),
       value: formatQuantidade(kpis.pesoComprado),
+      subValue: formatBRL(kpis.valorPesoComprado),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
       art: "ingot",
@@ -250,6 +269,7 @@ function renderKpis(records, prevRecords, series) {
       label: vocab("kpiVenda"),
       labelExtra: vocab("kpiVendaExtra"),
       value: formatQuantidade(kpis.pesoVendido),
+      subValue: formatBRL(kpis.valorPesoVendido),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
       art: "ingot",

@@ -1405,6 +1405,32 @@ td select {
   font-size: 2.1rem;
 }
 
+/* The R$ figure tied to a quantity value (2026-10-11: "Compras/Vendas de
+   ouro" showed grams but not what was paid/received for them) — a smaller,
+   accent-colored line under the main value, same tile, distinct from it. */
+.stat-subvalue {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+}
+
+.stat-subvalue-label {
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.stat-subvalue-amount {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-accent-text);
+  white-space: nowrap;
+}
+
 .stat-trend {
   align-self: flex-start;
   display: inline-flex;

@@ -10,16 +10,30 @@ function computeKpis(records) {
   let saidas = 0;
   let pesoComprado = 0; // grams acquired, from "Saída" (cash-out) rows
   let pesoVendido = 0; // grams sold, from "Entrada" (cash-in) rows
+  // R$ specifically tied to those same gold-carrying rows (2026-10-11,
+  // requested so "Compras/Vendas de ouro" shows not just grams but what was
+  // actually paid/received for them) — the same typeof r.peso === "number"
+  // test already used to decide a row is a gold movement at all, since a
+  // non-gold row's Peso/Quantidade cell reads back as null, never 0 (see
+  // converterNumero in js/esquema.js), so this never mixes in unrelated Valor.
+  let valorPesoComprado = 0;
+  let valorPesoVendido = 0;
   records.forEach((r) => {
     if (r.tipo === "Entrada") {
       entradas += r.valor;
-      if (typeof r.peso === "number") pesoVendido += r.peso;
+      if (typeof r.peso === "number") {
+        pesoVendido += r.peso;
+        valorPesoVendido += r.valor;
+      }
     } else if (r.tipo === "Saída") {
       saidas += Math.abs(r.valor);
-      if (typeof r.peso === "number") pesoComprado += r.peso;
+      if (typeof r.peso === "number") {
+        pesoComprado += r.peso;
+        valorPesoComprado += Math.abs(r.valor);
+      }
     }
   });
-  return { entradas, saidas, saldo: entradas - saidas, pesoComprado, pesoVendido };
+  return { entradas, saidas, saldo: entradas - saidas, pesoComprado, pesoVendido, valorPesoComprado, valorPesoVendido };
 }
 
 function computeByLoja(records) {
