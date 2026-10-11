@@ -1383,6 +1383,28 @@ td select {
   line-height: 1;
 }
 
+/* A large BRL value ("R$ 1.806.598") can be wider than a span-3 tile at the
+   default 1.9rem — .stat-tile's overflow: hidden then silently clips the
+   last digit instead of wrapping (reported 2026-10-11, a real value on the
+   live site, not a mock). buildKpiTile (js/dashboard.js) adds these classes
+   by character count rather than measuring pixels, same spirit as the
+   existing "999%+" trend cap just above this block. */
+.stat-value-long {
+  font-size: 1.5rem;
+}
+
+.stat-value-xlong {
+  font-size: 1.2rem;
+}
+
+.stat-tile-hero .stat-value-long {
+  font-size: 2.6rem;
+}
+
+.stat-tile-hero .stat-value-xlong {
+  font-size: 2.1rem;
+}
+
 .stat-trend {
   align-self: flex-start;
   display: inline-flex;
@@ -2365,6 +2387,22 @@ td select {
     font-size: 1.45rem;
   }
 
+  .stat-value-long {
+    font-size: 0.95rem;
+  }
+
+  .stat-value-xlong {
+    font-size: 0.8rem;
+  }
+
+  .stat-tile-hero .stat-value-long {
+    font-size: 1.15rem;
+  }
+
+  .stat-tile-hero .stat-value-xlong {
+    font-size: 0.95rem;
+  }
+
   .stat-trend-ref,
   .stat-label-extra {
     display: none;
@@ -2768,6 +2806,22 @@ td select {
 
   .stat-tile-hero .stat-value {
     font-size: 2.4rem;
+  }
+
+  .stat-value-long {
+    font-size: 1rem;
+  }
+
+  .stat-value-xlong {
+    font-size: 0.85rem;
+  }
+
+  .stat-tile-hero .stat-value-long {
+    font-size: 1.9rem;
+  }
+
+  .stat-tile-hero .stat-value-xlong {
+    font-size: 1.55rem;
   }
 
   .stat-art-hero {

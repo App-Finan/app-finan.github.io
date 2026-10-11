@@ -137,6 +137,12 @@ function buildKpiTile({ label, labelExtra, value, icon, iconClass, trend, hero, 
 
   const valueEl = document.createElement("div");
   valueEl.className = "stat-value";
+  // A large BRL value ("R$ 1.806.598") can be wider than the tile at the
+  // default size, which .stat-tile's overflow: hidden then silently clips
+  // instead of wrapping — shrink by character count rather than measuring
+  // pixels (same spirit as the "999%+" trend cap below).
+  if (value.length > 13) valueEl.classList.add("stat-value-xlong");
+  else if (value.length > 10) valueEl.classList.add("stat-value-long");
   valueEl.textContent = value;
 
   if (art) {
