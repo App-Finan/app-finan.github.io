@@ -123,6 +123,17 @@ function montarRelatorioImpressao() {
     qtdStats.appendChild(criarStatRelatorio(vocab("kpiCompra") + vocab("kpiCompraExtra"), formatQuantidade(kpis.pesoComprado)));
     qtdStats.appendChild(criarStatRelatorio(vocab("kpiVenda") + vocab("kpiVendaExtra"), formatQuantidade(kpis.pesoVendido)));
     resumo.appendChild(qtdStats);
+    // R$ behind those same quantities (2026-10-11, same figures the Dashboard's
+    // KPI tiles now show as a "Valor" sub-line — see js/dashboard-data.js's
+    // computeKpis) — requested specifically for FinanGold's gold tiles, but
+    // kept segment-neutral like the quantity row above it rather than special-
+    // cased to Joalheria, since the same "Compras/Vendas de itens" figures
+    // apply to any segment that tracks a quantity.
+    const qtdValorStats = document.createElement("div");
+    qtdValorStats.className = "relatorio-stats-row";
+    qtdValorStats.appendChild(criarStatRelatorio("Valor das " + vocab("kpiCompra").toLowerCase(), formatBRL(kpis.valorPesoComprado)));
+    qtdValorStats.appendChild(criarStatRelatorio("Valor das " + vocab("kpiVenda").toLowerCase(), formatBRL(kpis.valorPesoVendido)));
+    resumo.appendChild(qtdValorStats);
   }
   host.appendChild(resumo);
 
