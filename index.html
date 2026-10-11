@@ -414,6 +414,7 @@
             <button type="button" data-preset="tudo">Tudo</button>
           </div>
           <div class="filter-group filter-group-end">
+            <button type="button" id="btn-baixar-relatorio" class="export-btn">Baixar relatório</button>
             <button type="button" id="btn-refresh-dashboard" class="icon-btn" title="Atualizar dados" aria-label="Atualizar dados">⟳</button>
           </div>
         </section>
@@ -1148,6 +1149,13 @@
   </div>
 </div>
 
+<!-- Only ever shown for @media print (see css/style.css) — hidden on screen
+     at all times, filled fresh by js/relatorio-pdf.js right before
+     window.print() is called. A direct child of body, like every other
+     top-level screen, so the "hide everything except this" print rule can
+     target it simply. -->
+<div id="relatorio-impressao" class="relatorio-impressao"></div>
+
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="js/config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -1186,6 +1194,7 @@
 <script src="js/contas.js"></script>
 <script src="js/contas-ui.js"></script>
 <script src="js/relatorio.js"></script>
+<script src="js/relatorio-pdf.js"></script>
 <script src="js/export.js"></script>
 <script src="js/command-palette.js"></script>
 <script src="js/nav.js"></script>

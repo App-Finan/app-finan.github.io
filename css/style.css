@@ -3479,3 +3479,134 @@ td select {
   flex-wrap: wrap;
   margin-top: 0.5rem;
 }
+
+/* "Baixar relatório" (2026-10-11): hidden on screen always; shown only for
+   @media print, where it's the ONLY thing visible — everything else in body
+   (sidebar, topbar, whichever screen is active) is force-hidden regardless of
+   app state, so printing never depends on what the person happened to have
+   open. Deliberately plain light/black here, ignoring both app themes: the
+   "Ouro" near-black look would waste ink and read poorly on paper. */
+.relatorio-impressao {
+  display: none;
+}
+
+.relatorio-impressao header {
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #000;
+  padding-bottom: 0.75rem;
+}
+
+.relatorio-impressao h1 {
+  margin: 0 0 0.3rem;
+  font-size: 1.3rem;
+}
+
+.relatorio-impressao .relatorio-periodo {
+  margin: 0;
+  font-weight: 600;
+}
+
+.relatorio-impressao .relatorio-gerado-em {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.relatorio-impressao section {
+  margin-bottom: 1.25rem;
+  break-inside: avoid;
+}
+
+.relatorio-impressao h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #000;
+  padding-bottom: 0.25rem;
+  margin: 0 0 0.6rem;
+}
+
+.relatorio-stats-row {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.relatorio-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.relatorio-stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+}
+
+.relatorio-stat-valor {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.relatorio-impressao table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.relatorio-impressao th,
+.relatorio-impressao td {
+  border: 1px solid #999;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+}
+
+.relatorio-impressao th {
+  background: #eee;
+  font-weight: 700;
+}
+
+.relatorio-impressao td:not(:first-child),
+.relatorio-impressao th:not(:first-child) {
+  text-align: right;
+}
+
+@media print {
+  /* html/body carry the app's dark --color-bg; print-color-adjust is needed
+     because browsers skip printing "non-essential" background colors by
+     default to save ink, which silently defeated the plain background: #fff
+     override below on its own (confirmed by actually generating a PDF and
+     opening it — the page margin area printed solid black, not blank paper). */
+  html,
+  body {
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body > *:not(.relatorio-impressao) {
+    display: none !important;
+  }
+
+  /* @page's own margin box is OUTSIDE normal flow — html/body's background
+     doesn't reliably reach it either. Zero the native margin and do the
+     whitespace border as this element's own padding instead, with a
+     min-height tall enough to cover a full A4 page even on a short report,
+     so its white background is what's visible everywhere, margin included. */
+  .relatorio-impressao {
+    display: block !important;
+    background: #fff;
+    color: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    box-sizing: border-box;
+    min-height: 297mm;
+    padding: 16mm;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
