@@ -1,4 +1,4 @@
-const CACHE_NAME = "financegold-shell-v55";
+const CACHE_NAME = "financegold-shell-v56";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./js/senha.js",
   "./js/login-senha.js",
   "./js/completar-cadastro.js",
+  "./js/push.js",
   "./js/esquema.js",
   "./js/abas.js",
   "./js/auth.js",
@@ -100,4 +101,37 @@ self.addEventListener("fetch", (event) => {
           .then((cached) => cached || new Response("", { status: 504, statusText: "Offline" }))
       )
   );
+});
+
+// Push notifications (2026-10-10, see js/push.js and CLAUDE.md "Notificações
+// push"): shows a system notification when a push arrives while the app
+// isn't the focused tab (the foreground case is handled on the page itself,
+// in js/push.js's onMessage). A service worker can't import js/config.js as
+// module state, only via importScripts — these six values are public,
+// non-secret Firebase web config (same ones as js/config.js's FIREBASE_CONFIG;
+// keep both in sync if the Firebase project ever changes).
+importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js");
+firebase.initializeApp({
+  apiKey: "AIzaSyAn7U2v2Pc47vwRLbUumOC1OkjSSQvfkPw",
+  authDomain: "finan-push.firebaseapp.com",
+  projectId: "finan-push",
+  storageBucket: "finan-push.firebasestorage.app",
+  messagingSenderId: "564828633413",
+  appId: "1:564828633413:web:620496958eab957b1da62c",
+});
+firebase.messaging().onBackgroundMessage((payload) => {
+  const notificacao = (payload && payload.notification) || {};
+  const link = (payload.fcmOptions && payload.fcmOptions.link) || (payload.data && payload.data.link) || "./";
+  self.registration.showNotification(notificacao.title || "Finan.", {
+    body: notificacao.body || "",
+    icon: "./icons/icon-192.png",
+    data: { link: link },
+  });
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = (event.notification.data && event.notification.data.link) || "./";
+  event.waitUntil(clients.openWindow(link));
 });

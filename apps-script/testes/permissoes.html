@@ -990,6 +990,109 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
     });
     results.push((total === 1 && falhas === 0 ? "PASS" : "FAIL") + " looping every company (as the daily trigger does) mails Ipanema's conta and is a no-op for Carolina (no Contas tabs), with nothing thrown");
   }
+
+  // ---- push notifications (registrarPush) and the push/WhatsApp leg of the
+  // ---- reminder check, on top of makeDeps (which has no pushTokens/push/
+  // ---- whatsapp of its own — same pattern the password-login tests use).
+  function pushDeps(state) {
+    state.__push = state.__push || [];
+    state.__pushSent = state.__pushSent || [];
+    state.__whatsapp = state.__whatsapp || [];
+    const deps = makeDeps(state);
+    deps.pushTokens = {
+      list: () => state.__push.map((p) => Object.assign({}, p)),
+      add: (email, tok) => {
+        const canon = canonEmail_(email);
+        const existente = state.__push.filter((p) => p.token === tok)[0];
+        if (existente) { existente.email = canon; return; }
+        state.__push.push({ email: canon, token: tok });
+      },
+      remove: (tok) => { state.__push = state.__push.filter((p) => p.token !== tok); },
+    };
+    deps.push = {
+      enviar: (tok, titulo, corpo) => {
+        state.__pushSent.push({ token: tok, titulo: titulo, corpo: corpo });
+        return tok === state.__pushTokenMorto ? false : true;
+      },
+    };
+    deps.whatsapp = { enviar: (total, empresa) => { state.__whatsapp.push({ total: total, empresa: empresa }); } };
+    return deps;
+  }
+
+  // Any authenticated caller — any role, Google or password session — may
+  // register their OWN device; it is opt-in convenience, not a permission.
+  {
+    const state = freshState();
+    const deps = pushDeps(state);
+    const r = handleRequest({ token: "viz", action: "registrarPush", pushToken: "tok-viz-1" }, deps);
+    results.push((r && r.registrado === true && state.__push.length === 1 && state.__push[0].email === "viz@x.com" && state.__push[0].token === "tok-viz-1" ? "PASS" : "FAIL") + " a Visualizador can register their own device for push");
+  }
+  {
+    const state = freshState();
+    const deps = pushDeps(state);
+    const semToken = (() => { try { handleRequest({ token: "edi", action: "registrarPush", pushToken: "" }, deps); return null; } catch (e) { return e; } })();
+    results.push((semToken instanceof GatewayError_ && semToken.status === 400 ? "PASS" : "FAIL") + " an empty push token is refused");
+    const longoDemais = (() => { try { handleRequest({ token: "edi", action: "registrarPush", pushToken: "x".repeat(4097) }, deps); return null; } catch (e) { return e; } })();
+    results.push((longoDemais instanceof GatewayError_ && longoDemais.status === 400 ? "PASS" : "FAIL") + " an absurdly long push token is refused");
+  }
+  {
+    // handleRequest's OWN auth token also lives in body.token — a body that
+    // (wrongly) reused that name for the device token would register the
+    // caller's Google token string instead of a real FCM token.
+    const state = freshState();
+    const deps = pushDeps(state);
+    handleRequest({ token: "edi", action: "registrarPush", pushToken: "tok-edi-1" }, deps);
+    results.push((state.__push.length === 1 && state.__push[0].token === "tok-edi-1" && state.__push[0].token !== "edi" ? "PASS" : "FAIL") + " the stored token is the device token, never the caller's own auth token");
+  }
+  {
+    // Registering the same device token again just refreshes who owns it
+    // (does not create a duplicate row) — covers a device changing hands/accounts.
+    const state = freshState();
+    const deps = pushDeps(state);
+    handleRequest({ token: "edi", action: "registrarPush", pushToken: "tok-partilhado" }, deps);
+    handleRequest({ token: "mas", action: "registrarPush", pushToken: "tok-partilhado" }, deps);
+    results.push((state.__push.length === 1 && state.__push[0].email === "mas@x.com" ? "PASS" : "FAIL") + " re-registering the same device token re-assigns it instead of duplicating");
+  }
+
+  // executarVerificacaoLembretes_ also pushes to every registered device of
+  // each Editor/Master it e-mails, and removes a token the push send reports dead.
+  {
+    const state = contasState([["Contador", "Fulano", "Despesas fixas", 500, HOJE, "Pendente", "", "Sim", "", ""]], []);
+    const deps = pushDeps(state);
+    deps.pushTokens.add("edi@x.com", "tok-edi-vivo");
+    deps.pushTokens.add("mas@x.com", "tok-mas-morto");
+    state.__pushTokenMorto = "tok-mas-morto";
+    const resultado = executarVerificacaoLembretes_(deps, IPA, "Ipanema Joias");
+    results.push((resultado.avisados === 1 ? "PASS" : "FAIL") + " the reminder itself still works exactly as before with push wired in");
+    results.push((state.__pushSent.length === 2 ? "PASS" : "FAIL") + " a push was attempted for both registered devices (one per Editor/Master e-mailed)");
+    results.push((state.__push.length === 1 && state.__push[0].token === "tok-edi-vivo" ? "PASS" : "FAIL") + " the token the push send reported dead was removed; the live one was kept");
+    results.push((state.__whatsapp.length === 1 && state.__whatsapp[0].total === 1 && state.__whatsapp[0].empresa === "Ipanema Joias" ? "PASS" : "FAIL") + " the WhatsApp test contact was also notified, once, with the right total/company");
+  }
+  {
+    // No pending contas = no push, no WhatsApp either (same early return as e-mail).
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE + 30, "Pendente", "", "Não", "", ""]], []);
+    const deps = pushDeps(state);
+    deps.pushTokens.add("edi@x.com", "tok-edi-2");
+    executarVerificacaoLembretes_(deps, IPA, "Ipanema Joias");
+    results.push((state.__pushSent.length === 0 && state.__whatsapp.length === 0 ? "PASS" : "FAIL") + " nothing due soon means no push and no WhatsApp are sent, same as no e-mail");
+  }
+  {
+    // A person with no registered device simply gets no push attempt — not an error.
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", ""]], []);
+    const deps = pushDeps(state);
+    const resultado = executarVerificacaoLembretes_(deps, IPA, "Ipanema Joias");
+    results.push((resultado.avisados === 1 && state.__pushSent.length === 0 && state.__whatsapp.length === 1 ? "PASS" : "FAIL") + " nobody has a registered device: e-mail/WhatsApp still go out, push is just skipped");
+  }
+  {
+    // Without deps.pushTokens/deps.push/deps.whatsapp at all (every OTHER test
+    // in this whole suite, via the shared makeDeps) the reminder must behave
+    // exactly as it did before this feature existed — already re-confirmed by
+    // the full suite staying green, but asserted directly here too.
+    const state = contasState([["Aluguel", "Dono do ponto", "Despesas fixas", 1200, HOJE - 1, "Pendente", "", "Não", "", ""]], []);
+    const deps = makeDeps(state);
+    const resultado = executarVerificacaoLembretes_(deps, IPA, "Ipanema Joias");
+    results.push((resultado.avisados === 1 && state.__mail.length === 3 ? "PASS" : "FAIL") + " with no push/whatsapp deps at all (old makeDeps), the reminder still works via e-mail alone");
+  }
 })();
 
 const failed = results.filter((r) => r.indexOf("FAIL") === 0);

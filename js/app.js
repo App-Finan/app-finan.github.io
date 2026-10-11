@@ -412,6 +412,7 @@ function setupAjustesHandlers() {
 
   setupEditarPerfilForm();
   setupCriarSenhaAjustes();
+  setupNotificacoesAjustes();
 }
 
 const LAST_SESSION_KEY = "financegold_last_session";

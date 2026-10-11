@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-10-lembretes-diarios-agendados";
+const GATEWAY_VERSION = "2026-10-10-push-e-whatsapp";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -285,6 +285,14 @@ function realDeps_() {
     requests: requestsDeps_(),
     logins: loginsDeps_(cache),
     secrets: secretsDeps_(),
+    pushTokens: pushTokensDeps_(cache),
+    push: {
+      enviar: (token, titulo, corpo) =>
+        enviarPushFCM_({ cache: { get: (k) => cache.get(k), put: (k, v, s) => cache.put(k, v, s) }, now: () => Date.now() }, token, titulo, corpo, GATEWAY_CONFIG.APP_URL),
+    },
+    whatsapp: {
+      enviar: (totalContas, empresaNome) => enviarWhatsAppTeste_(totalContas, empresaNome),
+    },
     now: () => Date.now(),
     randomHex: randomHex_,
     mail: {
@@ -534,6 +542,7 @@ function despachar_(body, deps, email, sessaoSenha) {
   if (action === "pwListar") return acaoPwListar_(deps, email);
   if (action === "pwDecidir") return acaoPwDecidir_(deps, email, body);
   if (action === "completarCadastroAutorizado") return actionCompletarCadastro_(deps, email, sessaoSenha, body);
+  if (action === "registrarPush") return actionRegistrarPush_(deps, email, body);
   if (action === "me") return actionMe_(deps, email);
   if (action === "createCompany") return actionCreateCompany_(deps, email, body);
   if (action === "requestAccess") return actionRequestAccess_(deps, email, body);
@@ -1151,6 +1160,15 @@ function montarCorpoLembretes_(empresa, pendentes, hoje) {
   return partes.join("");
 }
 
+// A push notification has little room (and no "ver tabela" to open) — short,
+// just enough to make someone tap it and open the app.
+function montarCorpoPush_(pendentes) {
+  const total = pendentes.pagar.length + pendentes.receber.length;
+  const primeira = pendentes.pagar[0] || pendentes.receber[0];
+  if (total === 1 && primeira) return primeira.descricao + " — toque para ver.";
+  return "Toque para ver os detalhes no Finan.";
+}
+
 // The actual scan-and-mail work, with no notion of "who is asking" — shared
 // by the per-login path (actionVerificarLembretes_, role-gated below) and the
 // daily time-based trigger (verificarLembretesTodasEmpresasAgendado, which has
@@ -1194,12 +1212,30 @@ function executarVerificacaoLembretes_(deps, spreadsheetId, empresaNome) {
   const destinatarios = (loadUsuarios_(deps, spreadsheetId) || []).filter(
     (u) => u.perfil === ROLE_EDITOR || u.perfil === ROLE_MASTER
   );
+  const tituloAviso = total + " conta(s) para olhar — " + empresaNome;
   if (destinatarios.length > 0) {
-    const corpo = montarCorpoLembretes_(empresaNome, pendentes, hoje);
+    const corpoEmail = montarCorpoLembretes_(empresaNome, pendentes, hoje);
+    const corpoPush = montarCorpoPush_(pendentes);
     destinatarios.forEach((u) => {
-      enviarEmailSeguro_(deps, u.email, total + " conta(s) para olhar — " + empresaNome, corpo);
+      enviarEmailSeguro_(deps, u.email, tituloAviso, corpoEmail);
+      // Push (opt-in, per device — see completarCadastroAutorizado's sibling
+      // feature registrarPush): deps.pushTokens/deps.push are only present in
+      // realDeps_() once Firebase is configured, so this is a silent no-op
+      // everywhere else (including every existing test's makeDeps, unchanged).
+      if (deps.pushTokens && deps.push) {
+        const canon = canonEmail_(u.email);
+        deps.pushTokens.list().filter((t) => t.email === canon).forEach((t) => {
+          const ok = deps.push.enviar(t.token, tituloAviso, corpoPush);
+          if (ok === false) deps.pushTokens.remove(t.token);
+        });
+      }
     });
   }
+  // One verified WhatsApp test contact (the Ipanema Master, 2026-10-10 — see
+  // CLAUDE.md), platform-wide rather than per-company: deps.whatsapp only
+  // exists in realDeps_() once the Meta test number is configured, same
+  // no-op-until-configured pattern as push above.
+  if (deps.whatsapp) deps.whatsapp.enviar(total, empresaNome);
 
   return deps.lock(() => {
     [
@@ -1900,6 +1936,254 @@ function actionCompletarCadastro_(deps, email, sessaoSenha, body) {
     );
     return { criado: true };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Push notifications (2026-10-10): a device token for Firebase Cloud
+// Messaging, so the daily lembretes trigger can also tap a notification on
+// the phone/computer, not only e-mail. Anyone signed in — Google or e-mail+
+// senha — may register their OWN device; this is opt-in convenience (it only
+// lets the script find where to push TO), never a permission grant, so there
+// is no role check beyond "proved who they are" (handleRequest already did
+// that before despachar_ runs).
+// ---------------------------------------------------------------------------
+
+// body.pushToken, never body.token — the latter is already the auth token
+// handleRequest reads before despachar_ ever runs; reusing that name here
+// would silently register the person's Google/session token as if it were an
+// FCM device token instead of the real one the client means to send.
+function actionRegistrarPush_(deps, email, body) {
+  const token = typeof body.pushToken === "string" ? body.pushToken.trim() : "";
+  if (!token || token.length > 4096) throw new GatewayError_(400, "Token inválido.");
+  if (!deps.pushTokens) throw new GatewayError_(400, "Ação indisponível.");
+  deps.pushTokens.add(email, token);
+  return { registrado: true };
+}
+
+// Push tokens live in the registry spreadsheet (same bootstrap pattern as
+// loginsDeps_/requestsDeps_ above) — this is cross-company infrastructure
+// data (a device belongs to a PERSON, not to one company's spreadsheet), not
+// business data, so it never touches a company sheet.
+const PUSH_TOKENS_TAB = "PushTokens";
+const PUSH_TOKEN_HEADERS = ["E-mail", "Token", "Criado em", "Último confirmado em"];
+
+function pushTokensDeps_(cache) {
+  const props = PropertiesService.getScriptProperties();
+
+  function planilha_() {
+    let id = props.getProperty(REGISTRY_PROP);
+    if (!id) {
+      const criada = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
+      id = criada.spreadsheetId;
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      props.setProperty(REGISTRY_PROP, id);
+    }
+    const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
+    if (titulos.indexOf(PUSH_TOKENS_TAB) === -1) {
+      Sheets.Spreadsheets.batchUpdate({ requests: [{ addSheet: { properties: { title: PUSH_TOKENS_TAB } } }] }, id);
+      Sheets.Spreadsheets.Values.update({ values: [PUSH_TOKEN_HEADERS] }, id, PUSH_TOKENS_TAB + "!A1:D1", { valueInputOption: "RAW" });
+    }
+    return id;
+  }
+
+  return {
+    list: () => {
+      const guardado = cache.get("push_list");
+      if (guardado) return JSON.parse(guardado);
+      if (!props.getProperty(REGISTRY_PROP)) return [];
+      const dados = Sheets.Spreadsheets.Values.get(planilha_(), PUSH_TOKENS_TAB + "!A2:D", { valueRenderOption: "UNFORMATTED_VALUE" });
+      const lista = (dados.values || [])
+        .map((linha, i) => ({ linha: i + 2, email: canonEmail_(String(linha[0] || "")), token: String(linha[1] || "") }))
+        .filter((l) => l.email && l.token);
+      cache.put("push_list", JSON.stringify(lista), 20);
+      return lista;
+    },
+    add: (email, token) => {
+      const id = planilha_();
+      const canon = canonEmail_(email);
+      const dados = Sheets.Spreadsheets.Values.get(id, PUSH_TOKENS_TAB + "!A2:D", { valueRenderOption: "UNFORMATTED_VALUE" }).values || [];
+      const agora = new Date().toISOString();
+      for (let i = 0; i < dados.length; i += 1) {
+        if (String(dados[i][1] || "") === token) {
+          // Same device registering again — just confirm it's still this
+          // e-mail's (a device can change hands/accounts) and refresh the
+          // "last confirmed" stamp, keeping the original "Criado em".
+          Sheets.Spreadsheets.Values.update(
+            { values: [[canon, token, dados[i][2] || agora, agora]] },
+            id,
+            PUSH_TOKENS_TAB + "!A" + (i + 2) + ":D" + (i + 2),
+            { valueInputOption: "RAW" }
+          );
+          cache.remove("push_list");
+          return;
+        }
+      }
+      const proxima = dados.length + 2;
+      Sheets.Spreadsheets.Values.update(
+        { values: [[canon, token, agora, agora]] },
+        id,
+        PUSH_TOKENS_TAB + "!A" + proxima + ":D" + proxima,
+        { valueInputOption: "RAW" }
+      );
+      cache.remove("push_list");
+    },
+    // A dead/unregistered token (FCM's answer when the app was uninstalled or
+    // notification permission revoked) is blanked, not left to fail forever.
+    remove: (token) => {
+      const id = planilha_();
+      const dados = Sheets.Spreadsheets.Values.get(id, PUSH_TOKENS_TAB + "!A2:D", { valueRenderOption: "UNFORMATTED_VALUE" }).values || [];
+      for (let i = 0; i < dados.length; i += 1) {
+        if (String(dados[i][1] || "") === token) {
+          Sheets.Spreadsheets.Values.update(
+            { values: [["", "", "", ""]] },
+            id,
+            PUSH_TOKENS_TAB + "!A" + (i + 2) + ":D" + (i + 2),
+            { valueInputOption: "RAW" }
+          );
+          cache.remove("push_list");
+          return;
+        }
+      }
+    },
+  };
+}
+
+// ---- sending: Firebase Cloud Messaging (push) and WhatsApp (Meta Cloud API) ----
+// Both are configured entirely through Script Properties, never hardcoded, and
+// both are silent no-ops until configured (see CLAUDE.md for the exact
+// property names and values) — deliberately so a deploy of this code, before
+// either is set up, changes nothing about today's behavior. Only ever reached
+// through deps.push/deps.whatsapp (set in realDeps_ below): the pure logic in
+// executarVerificacaoLembretes_ never calls Utilities/PropertiesService/
+// UrlFetchApp directly, so it stays testable with mocked deps (see
+// verifyGoogleToken_ for the same pattern, used since the very first version
+// of this file).
+
+function configFCM_() {
+  const raw = PropertiesService.getScriptProperties().getProperty("FIREBASE_SERVICE_ACCOUNT_JSON");
+  if (!raw) return null;
+  try {
+    const conta = JSON.parse(raw);
+    if (!conta.client_email || !conta.private_key || !conta.project_id) return null;
+    return conta;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Accepts either a string or a raw byte array (Utilities.base64EncodeWebSafe
+// takes either) — used for both the JWT's text parts and its binary signature.
+function base64Url_(valor) {
+  return Utilities.base64EncodeWebSafe(valor).replace(/=+$/, "");
+}
+
+// A Google service-account JWT bearer exchange, signed with
+// Utilities.computeRsaSha256Signature — the one asymmetric-crypto primitive
+// Apps Script offers natively, which is exactly what this flow needs (no hand
+// -rolled elliptic-curve code required, unlike raw Web Push/VAPID — see the
+// CLAUDE.md note on why Firebase was chosen over implementing VAPID directly).
+function obterTokenAcessoFCM_(deps, conta) {
+  const cacheKey = "fcm_token_" + conta.project_id;
+  const cached = deps.cache.get(cacheKey);
+  if (cached) return cached;
+  const agora = Math.floor(deps.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claims = {
+    iss: conta.client_email,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: agora,
+    exp: agora + 3600,
+  };
+  const semAssinar = base64Url_(JSON.stringify(header)) + "." + base64Url_(JSON.stringify(claims));
+  // Signed as raw bytes, never routed through a String — a signature is binary,
+  // and converting bytes <-> a JS string first risks silently corrupting it.
+  const assinatura = Utilities.computeRsaSha256Signature(semAssinar, conta.private_key);
+  const jwt = semAssinar + "." + base64Url_(assinatura);
+  const resposta = UrlFetchApp.fetch("https://oauth2.googleapis.com/token", {
+    method: "post",
+    payload: { grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt },
+    muteHttpExceptions: true,
+  });
+  if (resposta.getResponseCode() !== 200) {
+    console.error("Autenticação FCM falhou: " + resposta.getContentText());
+    return null;
+  }
+  const dados = JSON.parse(resposta.getContentText());
+  deps.cache.put(cacheKey, dados.access_token, Math.min(3500, Number(dados.expires_in) || 3500));
+  return dados.access_token;
+}
+
+// Returns true (sent), false (the token is dead — caller should forget it),
+// or null (not configured / a transient error, neither sent nor dead). Takes
+// a minimal {cache, now} rather than a full deps (see where this is wired in
+// realDeps_ below) — just enough to cache the OAuth2 token between calls.
+function enviarPushFCM_(deps, token, titulo, corpo, link) {
+  const conta = configFCM_();
+  if (!conta) return null;
+  const acesso = obterTokenAcessoFCM_(deps, conta);
+  if (!acesso) return null;
+  const resposta = UrlFetchApp.fetch(
+    "https://fcm.googleapis.com/v1/projects/" + conta.project_id + "/messages:send",
+    {
+      method: "post",
+      contentType: "application/json",
+      headers: { Authorization: "Bearer " + acesso },
+      payload: JSON.stringify({
+        message: {
+          token: token,
+          notification: { title: titulo, body: corpo },
+          webpush: { fcm_options: { link: link } },
+        },
+      }),
+      muteHttpExceptions: true,
+    }
+  );
+  const codigo = resposta.getResponseCode();
+  if (codigo >= 200 && codigo < 300) return true;
+  const texto = resposta.getContentText();
+  if (codigo === 404 || /UNREGISTERED|NOT_FOUND|INVALID_ARGUMENT/.test(texto)) return false;
+  console.error("Push FCM falhou: " + codigo + " " + texto);
+  return null;
+}
+
+// One fixed, verified WhatsApp contact (Meta's free test-number tier caps at
+// 5 verified recipients total — see CLAUDE.md), platform-wide rather than
+// tied to one company: a template message (required for a business-initiated
+// message outside a 24h customer reply window) with two parameters, in the
+// exact order the approved template must use: {{1}} = quantidade, {{2}} =
+// empresa. "pt_BR" must match the template's own approved language.
+function enviarWhatsAppTeste_(totalContas, empresaNome) {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty("WHATSAPP_TOKEN");
+  const phoneId = props.getProperty("WHATSAPP_PHONE_NUMBER_ID");
+  const template = props.getProperty("WHATSAPP_TEMPLATE_NAME");
+  const numero = props.getProperty("WHATSAPP_NUMERO_TESTE");
+  if (!token || !phoneId || !template || !numero) return; // not configured yet
+
+  const resposta = UrlFetchApp.fetch("https://graph.facebook.com/v21.0/" + phoneId + "/messages", {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + token },
+    payload: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: numero,
+      type: "template",
+      template: {
+        name: template,
+        language: { code: "pt_BR" },
+        components: [
+          {
+            type: "body",
+            parameters: [{ type: "text", text: String(totalContas) }, { type: "text", text: empresaNome }],
+          },
+        ],
+      },
+    }),
+    muteHttpExceptions: true,
+  });
+  const codigo = resposta.getResponseCode();
+  if (codigo < 200 || codigo >= 300) console.error("WhatsApp falhou: " + codigo + " " + resposta.getContentText());
 }
 
 function resumoDoLogin_(l) {

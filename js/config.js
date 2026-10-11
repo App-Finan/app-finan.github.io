@@ -30,3 +30,19 @@ const CONFIG = {
 CONFIG.SCOPES = CONFIG.GATEWAY_URL
   ? "https://www.googleapis.com/auth/userinfo.email"
   : "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email";
+
+// Push notifications (2026-10-10, see CLAUDE.md "Notificações push"): Firebase
+// Cloud Messaging. The apiKey here is a public, per-project web key — Firebase
+// documents it as safe to ship in client code (unlike CLIENT_ID above it is
+// not even the real access boundary for anything); the real server-side
+// secret (the service account key) lives only in the Apps Script project's
+// Script Properties, never in this file or the repo.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAn7U2v2Pc47vwRLbUumOC1OkjSSQvfkPw",
+  authDomain: "finan-push.firebaseapp.com",
+  projectId: "finan-push",
+  storageBucket: "finan-push.firebasestorage.app",
+  messagingSenderId: "564828633413",
+  appId: "1:564828633413:web:620496958eab957b1da62c",
+};
+const FIREBASE_VAPID_KEY = "BE1ImzVAAYTow1dm0cE-e-DC0sI-M3iaoAH1ICmJnz5mNoeZgun8-YN-V6qrD4s7SpqxMNHHYTN1G-fSdg6-MjY";

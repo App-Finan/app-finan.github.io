@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Finan.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://sheets.googleapis.com https://oauth2.googleapis.com https://www.googleapis.com https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; object-src 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://sheets.googleapis.com https://oauth2.googleapis.com https://www.googleapis.com https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; object-src 'none';">
 <script src="js/seguranca.js"></script>
 <script src="js/inicio.js"></script>
 <title>Finan. — Financeiro</title>
@@ -998,6 +998,15 @@
           </form>
         </section>
 
+        <section class="card" id="ajustes-notificacoes-card">
+          <h2>Notificações</h2>
+          <p class="field-hint">Receba um aviso neste aparelho quando houver contas a pagar ou a receber vencendo — além do e-mail, que continua sendo enviado normalmente.</p>
+          <div class="form-actions">
+            <button type="button" id="btn-ativar-notificacoes">Ativar notificações neste aparelho</button>
+            <span id="notificacoes-status" class="status-message"></span>
+          </div>
+        </section>
+
         <section class="card" id="ajustes-trocar-empresa-card" hidden>
           <h2>Trocar de empresa</h2>
           <p>Sua conta tem acesso a mais de uma empresa neste app.</p>
@@ -1141,6 +1150,9 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="js/config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
+<script src="js/push.js"></script>
 <script src="js/tenants.js"></script>
 <script src="js/segmentos.js"></script>
 <script src="js/senha.js"></script>
