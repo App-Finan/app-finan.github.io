@@ -2667,19 +2667,14 @@ td select {
   margin: 0.75rem auto 0;
 }
 
-/* The "Novo/Nova ..." button for a listing screen, moved down here (next to
-   "Mostrar mais" where it exists) per the user's explicit request — it used
-   to sit in the filter row above the table/cards. */
-.lista-rodape {
+/* The "Novo/Nova ..." button for a listing screen: tried in the filter row,
+   then at the bottom next to "Mostrar mais" — the user asked for it back up
+   top, right above the table/cards (not buried in the filter row, not down
+   where it's easy to miss), in its own row so it still reads as a clear,
+   separate action rather than one more filter control. */
+.lista-topo {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.75rem;
-  margin: 1rem 0 0;
-}
-
-.lista-rodape .lista-mais {
-  margin: 0;
+  margin: 0 0 1rem;
 }
 
 /* Installed on a phone's home screen / notched screens: keep content clear of
@@ -2707,11 +2702,7 @@ td select {
     width: 100%;
   }
 
-  .lista-rodape {
-    flex-direction: column;
-  }
-
-  .lista-rodape .btn-primary {
+  .lista-topo .btn-primary {
     width: 100%;
   }
 

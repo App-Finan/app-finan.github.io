@@ -493,6 +493,10 @@
 
         <p id="lancamento-lista-count" class="status-message"></p>
 
+        <div class="lista-topo">
+          <button type="button" id="btn-novo-lancamento" class="btn-primary btn-ir-tela" data-view="lancamento-form">Novo lançamento</button>
+        </div>
+
         <div class="card table-wrapper">
           <table id="lancamento-lista-table">
             <thead>
@@ -513,10 +517,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div class="lista-rodape">
-          <button type="button" id="btn-novo-lancamento" class="btn-primary btn-ir-tela" data-view="lancamento-form">Novo lançamento</button>
-          <button type="button" id="lancamento-lista-mais" class="export-btn" hidden>Mostrar mais</button>
-        </div>
+        <button type="button" id="lancamento-lista-mais" class="export-btn lista-mais" hidden>Mostrar mais</button>
       </section>
 
       <section class="view-section card" data-view="lancamento-form" id="view-lancamento-form" hidden>
@@ -604,10 +605,11 @@
           </div>
         </section>
 
-        <div id="estoque-lista-container" class="estoque-list"></div>
-        <div class="lista-rodape">
+        <div class="lista-topo">
           <button type="button" id="btn-novo-estoque" class="btn-primary btn-ir-tela" data-view="estoque-form" data-vocab="novoItem">Nova peça</button>
         </div>
+
+        <div id="estoque-lista-container" class="estoque-list"></div>
       </section>
 
       <section class="view-section card" data-view="estoque-form" id="view-estoque-form" hidden>
@@ -686,10 +688,11 @@
           </div>
         </section>
 
-        <div id="fornecedores-lista-container" class="fornecedor-list"></div>
-        <div class="lista-rodape">
+        <div class="lista-topo">
           <button type="button" id="btn-novo-fornecedor" class="btn-primary btn-ir-tela" data-view="fornecedores-form">Novo fornecedor</button>
         </div>
+
+        <div id="fornecedores-lista-container" class="fornecedor-list"></div>
       </section>
 
       <section class="view-section card" data-view="fornecedores-form" id="view-fornecedores-form" hidden>
@@ -755,10 +758,11 @@
             <input type="text" id="contas-pagar-busca" placeholder="Descrição, fornecedor...">
           </div>
         </section>
-        <div id="contas-pagar-lista-container" class="fornecedor-list"></div>
-        <div class="lista-rodape">
+        <div class="lista-topo">
           <button type="button" id="btn-nova-conta-pagar" class="btn-primary btn-ir-tela" data-view="contas-pagar-form">Nova conta a pagar</button>
         </div>
+
+        <div id="contas-pagar-lista-container" class="fornecedor-list"></div>
       </section>
 
       <section class="view-section card" data-view="contas-pagar-form" id="view-contas-pagar-form" hidden>
@@ -825,10 +829,11 @@
             <input type="text" id="contas-receber-busca" placeholder="Descrição, cliente...">
           </div>
         </section>
-        <div id="contas-receber-lista-container" class="fornecedor-list"></div>
-        <div class="lista-rodape">
+        <div class="lista-topo">
           <button type="button" id="btn-nova-conta-receber" class="btn-primary btn-ir-tela" data-view="contas-receber-form">Nova conta a receber</button>
         </div>
+
+        <div id="contas-receber-lista-container" class="fornecedor-list"></div>
       </section>
 
       <section class="view-section card" data-view="contas-receber-form" id="view-contas-receber-form" hidden>
