@@ -252,6 +252,38 @@ function renderKpis(records, prevRecords, series) {
   );
 }
 
+// "Contas a Pagar"/"Contas a Receber", as plain numbers next to Entradas/
+// Saídas (requested 2026-10-11) — reuses the exact .conta-kpi card the Contas
+// a Pagar/Receber screens already use for their own "Pendente" stat, rather
+// than the heavier KPI-tile system (icon/trend/sparkline) those screens'
+// numbers don't have either. Deliberately NOT scoped to the dashboard's date
+// filter: unlike a period's entradas/saídas, "what's currently owed" has no
+// period of its own, so this renders once when the data loads/refreshes, not
+// on every filter change renderDashboardCharts triggers.
+function renderContasResumoDashboard(pagarItems, receberItems) {
+  const host = document.getElementById("dashboard-contas-kpis");
+  if (!host) return;
+  host.innerHTML = "";
+  const somarPendente = (items) =>
+    (items || []).reduce((acc, i) => acc + (i.status === CONTAS_CONFIG[i.tipo].statusAberto ? i.valor || 0 : 0), 0);
+  [
+    { label: "Contas a Pagar", valor: somarPendente(pagarItems) },
+    { label: "Contas a Receber", valor: somarPendente(receberItems) },
+  ].forEach((stat) => {
+    const card = document.createElement("div");
+    card.className = "card conta-kpi";
+    const label = document.createElement("div");
+    label.className = "stat-label";
+    label.textContent = stat.label;
+    const valor = document.createElement("div");
+    valor.className = "conta-kpi-valor";
+    valor.textContent = formatBRL(stat.valor);
+    card.appendChild(label);
+    card.appendChild(valor);
+    host.appendChild(card);
+  });
+}
+
 function chartBody(cardId) {
   return document.querySelector(`#${cardId} .chart-body`);
 }
@@ -350,7 +382,6 @@ function renderDashboardCharts() {
   renderKpis(filtered, prevFiltered, computeSeries(filtered, start, end));
   renderAtividadeRecente(filtered);
   renderDivergingBarChart(chartBody("chart-saldo-loja"), computeByLoja(filtered));
-  renderRankedBarChart(chartBody("chart-categorias-saida"), topNWithOthers(computeByCategoria(filtered, "Saída"), 10));
   renderMonthlyGroupedChart(chartBody("chart-mensal"), computeByMonth(filtered));
   renderDonutChart(chartBody("chart-pizza-saidas"), topNWithOthers(computeByCategoria(filtered, "Saída"), 5));
   renderDonutChart(chartBody("chart-pizza-entradas"), topNWithOthers(computeByCategoria(filtered, "Entrada"), 5));

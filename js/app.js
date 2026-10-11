@@ -323,6 +323,8 @@ async function refreshAllData() {
     errors.push(`Contas a Receber: ${err.message}`);
   }
 
+  renderContasResumoDashboard(allContas.pagar, allContas.receber);
+
   if (isMaster(currentUserRole)) {
     try {
       await refreshUsuariosAdmin();
@@ -603,6 +605,13 @@ async function startApp(token, nome, perfil, linha) {
     console.error(contasReceberResult.reason);
     errors.push(`Contas a Receber: ${contasReceberResult.reason.message}`);
   }
+
+  // Dashboard's own small "Contas a Pagar"/"Contas a Receber" numbers — shown
+  // even if only one of the two loaded (the other side just reads 0).
+  renderContasResumoDashboard(
+    contasPagarResult.status === "fulfilled" ? contasPagarResult.value.data : [],
+    contasReceberResult.status === "fulfilled" ? contasReceberResult.value.data : []
+  );
 
   // Avisos de vencimento (gateway mode only — sending e-mail needs Apps
   // Script). Fire-and-forget: checked once per login for Editor/Master (the
