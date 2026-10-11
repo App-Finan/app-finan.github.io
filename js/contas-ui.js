@@ -102,6 +102,7 @@ function contaStatusLabel(item) {
 
 function contaStatusClass(item) {
   if (ehContaAtrasada(item)) return "conta-status-atrasado";
+  if (item.status === STATUS_CANCELADA) return "fornecedor-status-inativo";
   if (item.status === CONTAS_CONFIG[item.tipo].statusAberto) return "conta-status-pendente";
   return "fornecedor-status-ativo";
 }
@@ -166,14 +167,47 @@ function renderContaActions(tipo, host, item, info) {
   const cfg = CONTAS_CONFIG[tipo];
   host.innerHTML = "";
   if (!canEdit(currentUserRole)) return;
+  // Pago/Recebido is still a true dead end (it already has a matching
+  // Lançamento — undoing it would mean undoing real money moved); Cancelada
+  // gets its own single way back (Reabrir), same shape as Fornecedores'
+  // Inativar/Reativar pair.
   if (item.status === cfg.statusFechado) return;
 
   const actions = document.createElement("div");
   actions.className = "fornecedor-actions";
+
+  if (item.status === STATUS_CANCELADA) {
+    actions.appendChild(
+      makeFornecedorActionButton("Reabrir", async () => {
+        try {
+          await reopenConta(tipo, item, accessToken);
+          await refreshContas(tipo);
+        } catch (err) {
+          console.error(err);
+          alert(describeSaveError(err));
+        }
+      })
+    );
+    host.appendChild(actions);
+    return;
+  }
+
   actions.appendChild(
     makeFornecedorActionButton(tipo === "pagar" ? "Pagar" : "Receber", () => showContaSettlePanel(tipo, info, item))
   );
   actions.appendChild(makeFornecedorActionButton("Editar", () => showContaEditPanel(tipo, info, item)));
+  actions.appendChild(
+    makeFornecedorActionButton("Cancelar", async () => {
+      if (!confirm(`Cancelar "${item.descricao}"? Ela deixa de aparecer como pendente e de gerar lembrete de vencimento, mas o histórico é mantido — dá para reabrir depois.`)) return;
+      try {
+        await cancelConta(tipo, item, accessToken);
+        await refreshContas(tipo);
+      } catch (err) {
+        console.error(err);
+        alert(describeSaveError(err));
+      }
+    }, "usuario-action-danger-soft")
+  );
   host.appendChild(actions);
 }
 

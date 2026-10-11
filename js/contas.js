@@ -204,3 +204,42 @@ async function settleConta(tipo, conta, { dataFechamento, loja, contaBancaria, e
 
   return lancamentoRow;
 }
+
+// A third, terminal status alongside Pendente/Pago(Recebido) — requested
+// 2026-10-11 for a conta entered by mistake or no longer owed/expected.
+// Unlike settleConta, this writes NO Lançamento (nothing financial actually
+// happened) and a recorrente conta's series simply stops: nothing here
+// creates next month's occurrence, which is exactly the point of cancelling
+// instead of paying. Server-side this needs no change at all: the reminder
+// trigger (executarVerificacaoLembretes_) already only ever considers rows
+// whose Status is literally "Pendente", so a cancelled conta stops being
+// reminded about for free.
+const STATUS_CANCELADA = "Cancelada";
+
+async function cancelConta(tipo, conta, token) {
+  await updateConta(
+    tipo,
+    conta,
+    {
+      status: STATUS_CANCELADA,
+      observacao: appendObservacao(conta.observacao, "Cancelada em " + toInputDateValueUTC(new Date()).split("-").reverse().join("/")),
+    },
+    token
+  );
+}
+
+// The one way back from Cancelada (or, in principle, from a Pago/Recebido
+// corrected by hand) — mirrors Fornecedores' Inativar/Reativar pair, so a
+// cancellation is never a dead end if it was a mistake.
+async function reopenConta(tipo, conta, token) {
+  const cfg = CONTAS_CONFIG[tipo];
+  await updateConta(
+    tipo,
+    conta,
+    {
+      status: cfg.statusAberto,
+      observacao: appendObservacao(conta.observacao, "Reaberta em " + toInputDateValueUTC(new Date()).split("-").reverse().join("/")),
+    },
+    token
+  );
+}
