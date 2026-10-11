@@ -423,19 +423,12 @@
         <section id="dashboard" hidden>
           <div class="kpi-row" id="kpi-row"></div>
 
-          <div class="contas-kpi-row" id="dashboard-contas-kpis"></div>
+          <div class="kpi-row" id="dashboard-contas-kpis"></div>
 
           <div class="charts-grid">
             <div class="chart-card card" id="chart-saldo-loja">
               <h2>Saldo por loja</h2>
               <div class="chart-body"></div>
-            </div>
-            <div class="chart-card card" id="atividade-recente">
-              <div class="activity-head">
-                <h2>Atividade recente</h2>
-                <button type="button" class="activity-see-all" data-view="lancamento-lista">Ver tudo</button>
-              </div>
-              <div id="atividade-recente-lista" class="activity-list"></div>
             </div>
           </div>
 
@@ -453,6 +446,14 @@
               <h2>Maiores entradas (por categoria)</h2>
               <div class="chart-body"></div>
             </div>
+          </div>
+
+          <div class="chart-card card full-width" id="atividade-recente">
+            <div class="activity-head">
+              <h2>Atividade recente</h2>
+              <button type="button" class="activity-see-all" data-view="lancamento-lista">Ver tudo</button>
+            </div>
+            <div id="atividade-recente-lista" class="activity-list"></div>
           </div>
         </section>
       </section>

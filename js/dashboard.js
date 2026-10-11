@@ -266,22 +266,18 @@ function renderContasResumoDashboard(pagarItems, receberItems) {
   host.innerHTML = "";
   const somarPendente = (items) =>
     (items || []).reduce((acc, i) => acc + (i.status === CONTAS_CONFIG[i.tipo].statusAberto ? i.valor || 0 : 0), 0);
-  [
-    { label: "Contas a Pagar", valor: somarPendente(pagarItems) },
-    { label: "Contas a Receber", valor: somarPendente(receberItems) },
-  ].forEach((stat) => {
-    const card = document.createElement("div");
-    card.className = "card conta-kpi";
-    const label = document.createElement("div");
-    label.className = "stat-label";
-    label.textContent = stat.label;
-    const valor = document.createElement("div");
-    valor.className = "conta-kpi-valor";
-    valor.textContent = formatBRL(stat.valor);
-    card.appendChild(label);
-    card.appendChild(valor);
-    host.appendChild(card);
-  });
+  // Same buildKpiTile the other tiles use (2026-10-11: the lighter .conta-kpi
+  // card — same one Contas a Pagar/Receber's own list screens use — looked
+  // visually empty/small next to the full-size tiles above it). No
+  // trend/spark/art, so it stays "só números" as asked; the icon alone
+  // (mirroring Entradas=up/success, Saídas=down/danger) is enough to fill a
+  // normal .stat-tile's height without inventing fake trend data.
+  host.appendChild(
+    buildKpiTile({ label: "Contas a Pagar", value: formatBRL(somarPendente(pagarItems)), icon: KPI_ICONS.down, iconClass: "danger" })
+  );
+  host.appendChild(
+    buildKpiTile({ label: "Contas a Receber", value: formatBRL(somarPendente(receberItems)), icon: KPI_ICONS.up, iconClass: "success" })
+  );
 }
 
 function chartBody(cardId) {

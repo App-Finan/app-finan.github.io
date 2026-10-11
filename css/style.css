@@ -1305,6 +1305,13 @@ td select {
   grid-column: span 6;
 }
 
+/* Contas a Pagar/Receber (2026-10-11): two plain-number tiles, no art/spark —
+   half-width each so the pair fills the row exactly like Compras/Vendas de
+   ouro above, instead of the default span-3 leaving half the row empty. */
+#dashboard-contas-kpis .stat-tile {
+  grid-column: span 6;
+}
+
 .stat-tile > *:not(.stat-art):not(.stat-spark-slot) {
   position: relative;
   z-index: 1;
@@ -1920,12 +1927,6 @@ td select {
   margin-bottom: 1.25rem;
 }
 
-/* The Dashboard's version only ever has two cards (Contas a Pagar/Receber,
-   no "Atrasadas"/"este mês" split — see js/dashboard.js) — 2 columns instead
-   of .contas-kpi-row's usual 3, so there is no empty third slot. */
-#dashboard-contas-kpis {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 
 .conta-kpi-valor {
   font-family: var(--font-mono);
