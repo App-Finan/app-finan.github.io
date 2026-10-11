@@ -351,26 +351,8 @@
     </div>
     <nav class="sidebar-nav">
       <button type="button" class="nav-item active" data-view="dashboard">Dashboard</button>
-      <div class="nav-group">
-        <button type="button" class="nav-item nav-group-toggle" data-group="lancamento">
-          <span class="nav-label">Fluxo de Caixa</span>
-          <span class="nav-caret">▾</span>
-        </button>
-        <div class="nav-submenu" id="submenu-lancamento" hidden>
-          <button type="button" class="nav-item nav-subitem" data-view="lancamento-lista">Consultar lançamentos</button>
-          <button type="button" class="nav-item nav-subitem" data-view="lancamento-form">Novo lançamento</button>
-        </div>
-      </div>
-      <div class="nav-group">
-        <button type="button" class="nav-item nav-group-toggle" data-group="estoque">
-          <span class="nav-label">Estoque</span>
-          <span class="nav-caret">▾</span>
-        </button>
-        <div class="nav-submenu" id="submenu-estoque" hidden>
-          <button type="button" class="nav-item nav-subitem" data-view="estoque-lista">Consultar estoque</button>
-          <button type="button" class="nav-item nav-subitem" data-view="estoque-form" data-vocab="novoItem">Nova peça</button>
-        </div>
-      </div>
+      <button type="button" class="nav-item" data-view="lancamento-lista">Fluxo de Caixa</button>
+      <button type="button" class="nav-item" data-view="estoque-lista">Estoque</button>
       <div class="nav-group">
         <button type="button" class="nav-item nav-group-toggle" data-group="financeiro">
           <span class="nav-label">Financeiro</span>
@@ -378,22 +360,11 @@
         </button>
         <div class="nav-submenu" id="submenu-financeiro" hidden>
           <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-lista">Contas a Pagar</button>
-          <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-form">Nova conta a pagar</button>
           <button type="button" class="nav-item nav-subitem" data-view="contas-receber-lista">Contas a Receber</button>
-          <button type="button" class="nav-item nav-subitem" data-view="contas-receber-form">Nova conta a receber</button>
           <button type="button" class="nav-item nav-subitem" data-view="relatorio">Relatório</button>
         </div>
       </div>
-      <div class="nav-group">
-        <button type="button" class="nav-item nav-group-toggle" data-group="compras">
-          <span class="nav-label">Compras</span>
-          <span class="nav-caret">▾</span>
-        </button>
-        <div class="nav-submenu" id="submenu-compras" hidden>
-          <button type="button" class="nav-item nav-subitem" data-view="fornecedores-lista">Fornecedores</button>
-          <button type="button" class="nav-item nav-subitem" data-view="fornecedores-form">Novo fornecedor</button>
-        </div>
-      </div>
+      <button type="button" class="nav-item" data-view="fornecedores-lista">Compras</button>
       <button type="button" class="nav-item" data-view="ajustes">Ajustes</button>
     </nav>
     <div class="sidebar-footer">
@@ -516,6 +487,7 @@
             <input type="text" id="lanc-lista-busca" placeholder="Categoria, pessoa, observação...">
           </div>
           <div class="filter-group filter-group-end">
+            <button type="button" id="btn-novo-lancamento" class="export-btn btn-ir-tela" data-view="lancamento-form">Novo lançamento</button>
             <button type="button" id="lanc-lista-export-btn" class="export-btn">Exportar CSV</button>
           </div>
         </section>
@@ -596,6 +568,7 @@
           <div class="form-grid" id="lancamento-extras-grid" hidden></div>
           <div class="form-actions">
             <button type="submit" id="btn-salvar-lancamento">Salvar lançamento</button>
+            <button type="button" class="export-btn btn-ir-tela" data-view="lancamento-lista">Cancelar</button>
             <span id="form-status" class="status-message"></span>
           </div>
         </form>
@@ -625,6 +598,7 @@
             <input type="text" id="estoque-busca" placeholder="Produto, marca, observação...">
           </div>
           <div class="filter-group filter-group-end">
+            <button type="button" id="btn-novo-estoque" class="export-btn btn-ir-tela" data-view="estoque-form" data-vocab="novoItem">Nova peça</button>
             <button type="button" id="estoque-export-btn" class="export-btn">Exportar CSV</button>
           </div>
         </section>
@@ -684,6 +658,7 @@
           <div class="form-grid" id="estoque-extras-grid" hidden></div>
           <div class="form-actions">
             <button type="submit" id="btn-salvar-estoque" data-vocab="salvarItem">Salvar peça</button>
+            <button type="button" class="export-btn btn-ir-tela" data-view="estoque-lista">Cancelar</button>
             <span id="estoque-form-status" class="status-message"></span>
           </div>
         </form>
@@ -704,6 +679,9 @@
               <input type="checkbox" id="fornecedores-mostrar-inativos" style="width: auto; margin-right: 0.35rem;">
               Mostrar inativos
             </label>
+          </div>
+          <div class="filter-group filter-group-end">
+            <button type="button" id="btn-novo-fornecedor" class="export-btn btn-ir-tela" data-view="fornecedores-form">Novo fornecedor</button>
           </div>
         </section>
 
@@ -746,6 +724,7 @@
           </div>
           <div class="form-actions">
             <button type="submit" id="btn-salvar-fornecedor">Salvar fornecedor</button>
+            <button type="button" class="export-btn btn-ir-tela" data-view="fornecedores-lista">Cancelar</button>
             <span id="fornecedores-form-status" class="status-message"></span>
           </div>
         </form>
@@ -770,6 +749,9 @@
           <div class="filter-group filter-group-grow">
             <label for="contas-pagar-busca">Buscar</label>
             <input type="text" id="contas-pagar-busca" placeholder="Descrição, fornecedor...">
+          </div>
+          <div class="filter-group filter-group-end">
+            <button type="button" id="btn-nova-conta-pagar" class="export-btn btn-ir-tela" data-view="contas-pagar-form">Nova conta a pagar</button>
           </div>
         </section>
         <div id="contas-pagar-lista-container" class="fornecedor-list"></div>
@@ -812,6 +794,7 @@
           </div>
           <div class="form-actions">
             <button type="submit" id="btn-salvar-contas-pagar">Salvar conta</button>
+            <button type="button" class="export-btn btn-ir-tela" data-view="contas-pagar-lista">Cancelar</button>
             <span id="contas-pagar-form-status" class="status-message"></span>
           </div>
         </form>
@@ -836,6 +819,9 @@
           <div class="filter-group filter-group-grow">
             <label for="contas-receber-busca">Buscar</label>
             <input type="text" id="contas-receber-busca" placeholder="Descrição, cliente...">
+          </div>
+          <div class="filter-group filter-group-end">
+            <button type="button" id="btn-nova-conta-receber" class="export-btn btn-ir-tela" data-view="contas-receber-form">Nova conta a receber</button>
           </div>
         </section>
         <div id="contas-receber-lista-container" class="fornecedor-list"></div>
@@ -878,6 +864,7 @@
           </div>
           <div class="form-actions">
             <button type="submit" id="btn-salvar-contas-receber">Salvar conta</button>
+            <button type="button" class="export-btn btn-ir-tela" data-view="contas-receber-lista">Cancelar</button>
             <span id="contas-receber-form-status" class="status-message"></span>
           </div>
         </form>

@@ -21,12 +21,14 @@ function commandLabel(cmd) {
 let paletteSelectedIndex = 0;
 let paletteFiltered = [];
 
-// A command is only offered if its nav element actually exists and isn't
-// role-hidden right now (mirrors applyRoleVisibility in js/nav.js) — the
-// palette must never offer a shortcut to something the current role
-// shouldn't see just because it skips the sidebar.
+// A command is only offered if its nav element (or, for the "Novo/Nova ..."
+// screens that no longer have a sidebar entry — see the sidebar-simplification
+// note in CLAUDE.md — the button that opens them on their listing screen)
+// actually exists and isn't role-hidden right now (mirrors applyRoleVisibility
+// in js/nav.js) — the palette must never offer a shortcut to something the
+// current role shouldn't see just because it skips the sidebar.
 function isCommandAvailable(cmd) {
-  const el = document.querySelector(`.nav-item[data-view="${cmd.view}"]`);
+  const el = document.querySelector(`.nav-item[data-view="${cmd.view}"], .btn-ir-tela[data-view="${cmd.view}"]`);
   return Boolean(el) && !el.hidden;
 }
 

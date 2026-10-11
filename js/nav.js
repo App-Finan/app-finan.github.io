@@ -34,13 +34,11 @@ const VIEW_EYEBROWS = {
   ajustes: "// ajustes",
 };
 
+// Only "financeiro" still has a submenu (Fluxo de Caixa/Estoque/Compras became
+// flat nav items — see index.html — to cut down the menu; their "Novo ..."
+// forms are reached from a button on the listing screen instead, not from the
+// sidebar at all, so they have no group to keep open/highlighted here).
 const VIEW_GROUPS = {
-  "lancamento-lista": "lancamento",
-  "lancamento-form": "lancamento",
-  "estoque-lista": "estoque",
-  "estoque-form": "estoque",
-  "fornecedores-lista": "compras",
-  "fornecedores-form": "compras",
   "contas-pagar-lista": "financeiro",
   "contas-pagar-form": "financeiro",
   "contas-receber-lista": "financeiro",
@@ -210,19 +208,15 @@ function setupThemeToggle() {
 }
 
 // Purely a UI convenience — hides screens a role shouldn't casually use.
-// Not a security boundary (see js/roles.js).
+// Not a security boundary (see js/roles.js). These "Novo ..." buttons live on
+// each listing screen now (not the sidebar — see index.html), so this just
+// hides the buttons themselves instead of nav-subitems.
 function applyRoleVisibility(role) {
   const editable = canEdit(role);
-  const lancForm = document.querySelector('.nav-subitem[data-view="lancamento-form"]');
-  const estoqueForm = document.querySelector('.nav-subitem[data-view="estoque-form"]');
-  const fornecedoresForm = document.querySelector('.nav-subitem[data-view="fornecedores-form"]');
-  const contasPagarForm = document.querySelector('.nav-subitem[data-view="contas-pagar-form"]');
-  const contasReceberForm = document.querySelector('.nav-subitem[data-view="contas-receber-form"]');
-  if (lancForm) lancForm.hidden = !editable;
-  if (estoqueForm) estoqueForm.hidden = !editable;
-  if (fornecedoresForm) fornecedoresForm.hidden = !editable;
-  if (contasPagarForm) contasPagarForm.hidden = !editable;
-  if (contasReceberForm) contasReceberForm.hidden = !editable;
+  ["btn-novo-lancamento", "btn-novo-estoque", "btn-novo-fornecedor", "btn-nova-conta-pagar", "btn-nova-conta-receber"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.hidden = !editable;
+  });
 }
 
 let navigationInitialized = false;
@@ -239,6 +233,12 @@ function setupNavigation() {
   });
   document.querySelectorAll(".nav-group-toggle").forEach((btn) => {
     btn.addEventListener("click", () => toggleSubmenu(btn.dataset.group));
+  });
+  // "Novo ..." (on each listing screen) and "Cancelar" (on each form) — a
+  // plain view switch, same idea as .activity-see-all on the dashboard, just
+  // shared across every one of these buttons instead of a one-off handler per button.
+  document.querySelectorAll(".btn-ir-tela[data-view]").forEach((btn) => {
+    btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
 
   setupSidebarCollapse();
