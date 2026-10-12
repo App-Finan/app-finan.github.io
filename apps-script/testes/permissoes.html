@@ -21,6 +21,10 @@ function makeDeps(state) {
       setStatus: (linha, status, nota) => { const r = state.__requests.filter((x) => x.linha === linha)[0]; if (r) { r.status = status; r.nota = nota; } },
     },
     mail: { send: (m) => { if (state.__mailFail) throw new Error("mail down"); state.__mail.push(m); } },
+    quotaEmail: {
+      getUltimoAlerta: () => state.__quotaAlerta || null,
+      setUltimoAlerta: (d) => { state.__quotaAlerta = d; },
+    },
     registry: { list: () => state.__registry.slice(), add: (e) => { state.__registry.push({ spreadsheetId: e.spreadsheetId, empresa: e.empresa, sheetName: "Lançamento", segmento: e.segmento }); } },
     sheets: {
       getTitles: (id) => Object.keys(state[id]),
@@ -45,7 +49,7 @@ function makeDeps(state) {
 }
 function freshState() {
   return {
-    __created: 0, __registry: [], __requests: [], __mail: [],
+    __created: 0, __registry: [], __requests: [], __mail: [], __quotaAlerta: null,
     [IPA]: { Lojas: [[]], Contas: [[]], Empresas: [[]], Categoria: [[]], Pessoa: [[]], Produto: [[]], "Tipo de Produto": [[]], Marcas: [[]], "Lançamento": [[]], Estoque: [[]], Fornecedores: [[]], "Contas a Pagar": [[]], "Contas a Receber": [[]], Usuários: [["Email","Nome","Perfil"], ["viz@x.com","Viz","Visualizador"], ["edi@x.com","Edi","Editor"], ["mas@x.com","Mas","Master"], [ADMIN_EMAIL,"Matheus","Master"]] },
     [CAR]: { "Lançamento": [[]], Estoque: [[]] }, // no Usuários tab yet
   };
@@ -989,6 +993,45 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
       }
     });
     results.push((total === 1 && falhas === 0 ? "PASS" : "FAIL") + " looping every company (as the daily trigger does) mails Ipanema's conta and is a no-op for Carolina (no Contas tabs), with nothing thrown");
+  }
+
+  // ---- verificarCotaDeEmail_ (the Mail quota alert, 2026-10-11) ----
+  {
+    const state = freshState();
+    const deps = makeDeps(state);
+    const r = verificarCotaDeEmail_(deps, 50); // 50/100 used = 50%, below the 90% threshold
+    results.push((r.avisado === false && state.__mail.length === 0 ? "PASS" : "FAIL") + " quota alert: below threshold sends nothing");
+  }
+  {
+    const state = freshState();
+    const deps = makeDeps(state);
+    const r = verificarCotaDeEmail_(deps, 5); // 95/100 used = 95%, over the 90% threshold
+    results.push((r.avisado === true && state.__mail.length === 1 && state.__mail[0].to === ADMIN_EMAIL ? "PASS" : "FAIL") + " quota alert: over threshold mails ADMIN_EMAILS once");
+  }
+  {
+    const state = freshState();
+    const deps = makeDeps(state);
+    verificarCotaDeEmail_(deps, 5);
+    const r2 = verificarCotaDeEmail_(deps, 2); // still over threshold, same (mocked) day
+    results.push((r2.avisado === false && state.__mail.length === 1 ? "PASS" : "FAIL") + " quota alert: a second check the same day does not re-mail");
+  }
+  {
+    // Simulates "a new day arrived" by clearing the stored date directly,
+    // since makeDeps' now() is the real clock and can't be moved forward
+    // mid-test — this still exercises the real comparison in
+    // verificarCotaDeEmail_ (stored date !== computed "today").
+    const state = freshState();
+    const deps = makeDeps(state);
+    verificarCotaDeEmail_(deps, 5);
+    state.__quotaAlerta = "2000-01-01";
+    const r2 = verificarCotaDeEmail_(deps, 2);
+    results.push((r2.avisado === true && state.__mail.length === 2 ? "PASS" : "FAIL") + " quota alert: a new day (different stored date) alerts again");
+  }
+  {
+    const state = freshState();
+    const deps = makeDeps(state);
+    const r = verificarCotaDeEmail_(deps, 10); // exactly 90/100 = 90%, the threshold itself counts as "over"
+    results.push((r.avisado === true ? "PASS" : "FAIL") + " quota alert: exactly 90% used counts as crossing the threshold");
   }
 
   // ---- push notifications (registrarPush) and the push/WhatsApp leg of the

@@ -285,6 +285,7 @@ function realDeps_() {
     requests: requestsDeps_(),
     logins: loginsDeps_(cache),
     secrets: secretsDeps_(),
+    quotaEmail: quotaEmailDeps_(),
     pushTokens: pushTokensDeps_(cache),
     push: {
       enviar: (token, titulo, corpo) =>
@@ -1294,6 +1295,78 @@ function instalarGatilhoLembretes() {
   console.log("Gatilho diário instalado: verificarLembretesTodasEmpresasAgendado, por volta das 7h.");
 }
 
+// ---------------------------------------------------------------------------
+// E-mail quota alert (2026-10-11, requested so the owner finds out BEFORE the
+// system silently stops sending e-mail): finanponto@gmail.com's free Gmail
+// account is the ONLY sender for the whole system — access-request e-mails,
+// password-login codes, due-bill reminders — so every company shares the
+// same daily MailApp cap. If that cap is ever reached, people silently stop
+// getting codes/reminders with no visible error anywhere in the app. This
+// warns ADMIN_EMAILS once the account crosses MAIL_QUOTA_ALERTA_PCT of that
+// daily allowance, well before it actually runs out, so there's time to act
+// (e.g. move the system account to Google Workspace for a bigger quota —
+// see the scaling notes in CLAUDE.md) before anyone is actually affected.
+// ---------------------------------------------------------------------------
+
+// Google's documented free-Gmail MailApp quota (100 recipients/day as of
+// this writing). MailApp itself only ever reports what's LEFT
+// (getRemainingDailyQuota), never the total, so this has to be kept in sync
+// by hand if finanponto@gmail.com is ever moved to a paid Workspace plan,
+// which raises the real limit well above this number.
+const MAIL_QUOTA_DIARIA_ESPERADA = 100;
+const MAIL_QUOTA_ALERTA_PCT = 0.9;
+
+// `restante` is injected (rather than calling MailApp directly in here) so
+// the test suite can simulate any quota level without sending real mail or
+// depending on the real account's actual quota at test time.
+function verificarCotaDeEmail_(deps, restante) {
+  const usados = MAIL_QUOTA_DIARIA_ESPERADA - restante;
+  const pct = usados / MAIL_QUOTA_DIARIA_ESPERADA;
+  if (pct < MAIL_QUOTA_ALERTA_PCT) return { avisado: false };
+
+  // One alert per day: MailApp's quota resets at midnight (Pacific time, per
+  // Google) — comparing against today's UTC date just needs to change once a
+  // day, not match that reset instant exactly, so it's enough to stop this
+  // from re-sending every time the trigger fires within the same day.
+  const hoje = new Date(deps.now()).toISOString().slice(0, 10);
+  if (deps.quotaEmail.getUltimoAlerta() === hoje) return { avisado: false };
+
+  deps.mail.send({
+    to: deps.config.ADMIN_EMAILS.join(","),
+    subject: "Finan. — cota de e-mail quase no limite",
+    body:
+      "A conta de e-mail do sistema (finanponto@gmail.com) já usou " +
+      usados +
+      " de " +
+      MAIL_QUOTA_DIARIA_ESPERADA +
+      " envios de hoje (" +
+      Math.round(pct * 100) +
+      "%). Restam aproximadamente " +
+      restante +
+      ".\n\n" +
+      "Essa conta envia TODOS os e-mails do sistema (pedidos de acesso, códigos de login, lembretes de contas) " +
+      "para TODAS as empresas cadastradas — se a cota acabar, esses e-mails param de ser enviados silenciosamente, " +
+      "sem nenhum erro visível no app.\n\n" +
+      "A cota volta a zerar por volta da meia-noite no horário da Califórnia (~21h de Brasília). " +
+      "Se isso estiver acontecendo com frequência, considere migrar essa conta para o Google Workspace (plano pago), " +
+      "que tem um limite diário de envio bem maior.",
+  });
+  deps.quotaEmail.setUltimoAlerta(hoje);
+  return { avisado: true };
+}
+
+function verificarCotaDeEmailAgendado() {
+  verificarCotaDeEmail_(realDeps_(), MailApp.getRemainingDailyQuota());
+}
+
+function instalarGatilhoCotaDeEmail() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "verificarCotaDeEmailAgendado") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("verificarCotaDeEmailAgendado").timeBased().everyHours(2).create();
+  console.log("Gatilho de cota de e-mail instalado: verificarCotaDeEmailAgendado, a cada 2 horas.");
+}
+
 // ===========================================================================
 // Login with e-mail + password (alongside Google sign-in)
 //
@@ -1445,6 +1518,17 @@ function randomHex_(nBytes) {
     out += u.slice(0, 12) + u.slice(13, 16) + u.slice(17);
   }
   return out.slice(0, nBytes * 2);
+}
+
+// Just enough storage for verificarCotaDeEmail_'s once-a-day dedupe — a
+// Script Property rather than the cache, since CacheService's max expiry
+// (6h) is too short to hold "don't alert again today" across a full day.
+function quotaEmailDeps_() {
+  const props = PropertiesService.getScriptProperties();
+  return {
+    getUltimoAlerta: () => props.getProperty("MAIL_QUOTA_ALERTA_DATA"),
+    setUltimoAlerta: (data) => props.setProperty("MAIL_QUOTA_ALERTA_DATA", data),
+  };
 }
 
 function secretsDeps_() {
