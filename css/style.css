@@ -1286,6 +1286,15 @@ td select {
   border-radius: 18px;
   padding: 1.35rem 1.4rem;
   transition: border-color 0.15s ease;
+  /* Lets .stat-label-extra react to the TILE's own rendered width below
+     (2026-10-11) — a span-3 tile can end up narrow at widths the existing
+     720px viewport breakpoint doesn't cover (e.g. a half-screen browser
+     window, or a tablet, where the 12-column desktop grid is still active
+     but each tile is still fairly narrow), and "[ ENTRADAS DO PERÍODO ]"
+     wrapped mid-phrase there instead of adapting. A container query reacts
+     to the actual tile width in every grid configuration, not just the
+     viewport widths the existing media queries happen to target. */
+  container-type: inline-size;
 }
 
 .stat-tile:hover {
@@ -1332,6 +1341,7 @@ td select {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-muted);
+  white-space: nowrap;
 }
 
 .stat-label::before {
@@ -1340,6 +1350,15 @@ td select {
 
 .stat-label::after {
   content: " ]";
+}
+
+/* Drops the " do período"/" de ouro (g)" qualifier once the tile itself (not
+   the viewport) is too narrow for the full phrase to fit on one line — see
+   the container-type note on .stat-tile above. */
+@container (max-width: 230px) {
+  .stat-label-extra {
+    display: none;
+  }
 }
 
 .stat-icon {
