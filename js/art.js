@@ -117,24 +117,47 @@ function buildHeroArt() {
   return wrapArt(330, 260, "art-svg", [colored("art-halftone", buildHalftone(215, 120, 108, 9, 4.1)), desenho]);
 }
 
-// The two-cube mark spans about 2.6 x 2.5 grid units, so its scale and offset
-// are computed from the box it must fit in — a fixed scale used to overflow the
-// viewBox and clip the right and bottom edges.
+// Finan. Capital brand mark (2026-10-12): a rounded square with "F" and a
+// small square dot, replacing the earlier two-cube wireframe — see the
+// brand guide (guia-da-marca-finan.md) and the approved Design-canvas
+// prototype. Colored via CSS (.logo-square/.logo-f/.logo-dot in
+// css/style.css), not fixed here, so the same markup reads correctly both on
+// a plain light surface and inside the navy sidebar/auth panel.
 function buildLogoMark(size) {
-  const pad = 2;
-  const boxW = Math.round(size * 1.35);
-  const boxH = Math.round(size * 1.3);
-  const unitsW = 2 * Math.cos(Math.PI / 6) * 1.5; // x-extent of the two cubes in grid units
-  const unitsH = 2.5; // y-extent in grid units
-  const scale = Math.min((boxW - 2 * pad) / unitsW, (boxH - 2 * pad) / unitsH);
-  const ox = pad + Math.cos(Math.PI / 6) * scale + (boxW - 2 * pad - unitsW * scale) / 2;
-  const oy = pad + scale + (boxH - 2 * pad - unitsH * scale) / 2;
-  const svg = wrapArt(boxW, boxH, "art-logo-svg", [
-    colored("art-accent", buildWireframe([[0, 0, 0, 1], [1, 0, 0, 1]], scale, ox, oy, 1.6, 1)),
-  ]);
-  // The logo has a fixed size (the other art scales to its container).
-  svg.setAttribute("width", String(boxW));
-  svg.setAttribute("height", String(boxH));
+  const radius = size * 0.26;
+  const fontSize = size * 0.52;
+  const dot = Math.max(2, size * 0.12);
+  const pad = size * 0.17;
+  const svg = svgNode("svg", {
+    viewBox: `0 0 ${size} ${size}`,
+    width: String(size),
+    height: String(size),
+    "aria-hidden": "true",
+    focusable: "false",
+  });
+  svg.setAttribute("class", "art-logo-svg");
+  svg.appendChild(
+    svgNode("rect", { x: "0", y: "0", width: String(size), height: String(size), rx: radius.toFixed(1), class: "logo-square" })
+  );
+  const f = svgNode("text", {
+    x: pad.toFixed(1),
+    y: (size - pad - dot * 0.35).toFixed(1),
+    "font-family": "'Sora', system-ui, sans-serif",
+    "font-weight": "700",
+    "font-size": fontSize.toFixed(1),
+    class: "logo-f",
+  });
+  f.textContent = "F";
+  svg.appendChild(f);
+  svg.appendChild(
+    svgNode("rect", {
+      x: (size - pad - dot).toFixed(1),
+      y: (size - pad - dot).toFixed(1),
+      width: dot.toFixed(1),
+      height: dot.toFixed(1),
+      class: "logo-dot",
+    })
+  );
   return svg;
 }
 
@@ -361,21 +384,32 @@ function grupoMarcaSegmento(id, cx, cy, caixaW, caixaH, traco) {
   return g;
 }
 
-// Puts the current segment's mark in the sidebar logo slot.
+// Puts the current segment's mark in the sidebar logo slot. Joalheria/Outro
+// use the Finan. Capital brand mark itself (desenhoCubosLogo, their entry in
+// MARCAS_SEGMENTO, is no longer drawn anywhere once this bypasses it) —
+// every other segment keeps its own distinct mark (cat/dog, hex nut...).
 function trocarLogoSegmento(id) {
   const slot = document.getElementById("sidebar-logo");
   if (!slot) return;
   slot.innerHTML = "";
-  slot.appendChild(buildSegmentMark(id, 26));
+  if (id === "joalheria" || id === "outro") {
+    slot.appendChild(buildLogoMark(26));
+  } else {
+    slot.appendChild(buildSegmentMark(id, 26));
+  }
 }
 
 // Fills every static slot in the page: [data-art="brand|logo|logo-lg"].
+// "brand" (the login screen's big centerpiece) is deliberately left empty
+// since 2026-10-12 — the Finan. Capital look replaces the old wireframe-cube-
+// plus-halftone-sphere art with the two faint outlined squares drawn in CSS
+// (.auth-brand::before/::after), not JS-built SVG; buildBrandArt() is kept,
+// unused, in case a future design wants SVG art there again.
 function mountStaticArt() {
   document.querySelectorAll("[data-art]").forEach((slot) => {
     if (slot.firstChild) return;
     const kind = slot.dataset.art;
-    if (kind === "brand") slot.appendChild(buildBrandArt());
-    else if (kind === "logo") slot.appendChild(buildLogoMark(26));
+    if (kind === "logo") slot.appendChild(buildLogoMark(26));
     else if (kind === "logo-lg") slot.appendChild(buildLogoMark(30));
   });
 }

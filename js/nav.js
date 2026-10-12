@@ -19,19 +19,19 @@ function getViewTitle(view) {
 }
 
 const VIEW_EYEBROWS = {
-  dashboard: "// painel",
-  "lancamento-lista": "// fluxo de caixa",
-  "lancamento-form": "// fluxo de caixa",
-  "estoque-lista": "// estoque",
-  "estoque-form": "// estoque",
-  "fornecedores-lista": "// compras",
-  "fornecedores-form": "// compras",
-  "contas-pagar-lista": "// financeiro",
-  "contas-pagar-form": "// financeiro",
-  "contas-receber-lista": "// financeiro",
-  "contas-receber-form": "// financeiro",
-  relatorio: "// financeiro",
-  ajustes: "// ajustes",
+  dashboard: "Painel",
+  "lancamento-lista": "Fluxo de caixa",
+  "lancamento-form": "Fluxo de caixa",
+  "estoque-lista": "Estoque",
+  "estoque-form": "Estoque",
+  "fornecedores-lista": "Compras",
+  "fornecedores-form": "Compras",
+  "contas-pagar-lista": "Financeiro",
+  "contas-pagar-form": "Financeiro",
+  "contas-receber-lista": "Financeiro",
+  "contas-receber-form": "Financeiro",
+  relatorio: "Financeiro",
+  ajustes: "Ajustes",
 };
 
 // Only "financeiro" still has a submenu (Fluxo de Caixa/Estoque/Compras became

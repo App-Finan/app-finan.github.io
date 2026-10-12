@@ -1,110 +1,72 @@
 :root {
-  /* Direction "Ouro" (see the Visual design system note in CLAUDE.md): a
-     near-black graphite ground, one gold accent, technical mono labels. Dark
-     is still the default and the only look for the auth screens (a deliberate
-     brand panel, not a "theme"), but the app itself (#app-shell) can switch to
-     a light variant, "Papel" — see the [data-theme="light"] block below. */
-  color-scheme: dark;
-  --color-bg: #060504;
-  --color-surface: #0e0c08;
-  --color-surface-2: #15120b;
-  --color-text: #f4efe4;
-  --color-muted: #9b9078;
-  --color-subtle: #8a7f66;
-  --color-border: #2a2417;
-  --color-gridline: #1c1810;
-  --color-baseline: #3a3220;
-
-  --color-accent: #e3b341;
-  --color-accent-hover: #f0c55e;
-  --color-accent-contrast: #191203;
-  --color-accent-wash: rgba(227, 179, 65, 0.1);
-  --color-edge: rgba(227, 179, 65, 0.34);
-  /* --color-accent itself is a fixed brand color, used as a solid FILL (button
-     backgrounds, active pills) with --color-accent-contrast ink on top — that
-     pairing is readable regardless of theme, so it never changes below.
-     --color-accent-text is the same gold used as a FOREGROUND (text, borders,
-     thin strokes) directly on the page/card background: on the dark ground
-     #e3b341 reads fine there too, but on the light "Papel" ground it fails
-     contrast (~1.9:1) and would repeat the old .btn-logout invisible-button
-     bug — so this token gets its own, darker value in the light block below. */
-  --color-accent-text: var(--color-accent);
-
-  /* "Success"/positive is the gold accent itself (entradas, favorable trends);
-     danger is a warm red, so the two are never confused. */
-  --color-success: #e3b341;
-  --color-success-wash: rgba(227, 179, 65, 0.12);
-  --color-danger: #ff6b5a;
-  --color-danger-wash: rgba(255, 107, 90, 0.12);
-
-  --hero-bg: #0e0c08;
-  --hero-text: #f4efe4;
-  --hero-text-muted: #9b9078;
-  --hero-accent: #e3b341;
-
-  --shadow-sm: none;
-  --shadow-md: 0 12px 40px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 6px 24px rgba(227, 179, 65, 0.22);
-
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-
-  /* Chart series: validated with the dataviz skill's validate_palette.py for a
-     dark surface (#0e0c08) — lightness band, chroma floor, CVD separation and
-     contrast all pass. A slightly deeper gold than the UI accent is what fits
-     the band. Entradas = series-1 (gold), saídas = series-2 (blue). */
-  --series-1: #b5890b;
-  --series-2: #0694fb;
-  --series-3: #0ba985;
-  --series-4: #e7620b;
-  --series-5: #a767fe;
-  --series-6: #f63398;
-
-  --diverging-pos: #b5890b;
-  --diverging-neg: #ff6b5a;
-
-  --good-text: #6fe0a0;
-}
-
-/* Light theme, direction "Papel" (approved by the user 2026-09-26 from two
-   prototyped directions — see the design canvas linked from that session).
-   Applies document-wide (so it also reaches things mounted outside #app-shell,
-   like the command palette) EXCEPT the auth-only screens, which are re-pinned
-   to the dark palette right below: their near-black brand panel is a fixed
-   identity choice, not a "theme," and was never part of what was prototyped.
-   The brand gold (--color-accent, its hover/contrast/wash) is deliberately
-   NOT overridden here — same gold in both themes, only its foreground/text
-   role (--color-accent-text) gets a darker, readable value. Chart series were
-   re-validated for this surface with the dataviz skill's validate_palette.py
-   ("#9c7a0a,#0668c4,#067a5c,#b84e09,#7a3fd1,#c22572" --mode light --surface
-   "#fffdf8" → all 6 checks PASS); re-run that check before changing any of
-   the six below. */
-:root[data-theme="light"] {
+  /* Direction "Finan. Capital" (2026-10-12): the product's real operating
+     company adopted this brand — navy + gold + off-white, Sora throughout —
+     replacing the earlier near-black "Ouro" look. Approved first as a
+     Design-canvas prototype of five screens (login, dashboard, lista,
+     formulário, ajustes) before any app code changed, same "prototype first"
+     pattern as every earlier redesign in this file. Off-white is now the
+     default/only look (no more dark-by-default): --color-bg/--color-surface
+     are the ones every card/page already reads, so repainting them here
+     cascades through the whole app with no other file needing to change.
+     The former dark/"Papel" light toggle is gone — both states of
+     #theme-toggle-btn now render identically (the button and its JS/
+     localStorage wiring were deliberately left untouched, per the user's
+     "mantenha os botões/conexões" instruction, even though there is only one
+     look to show right now); a real second (dark) variant is a follow-up,
+     not decided yet. */
   color-scheme: light;
-  --color-bg: #f7f2e3;
-  --color-surface: #fffdf8;
-  --color-surface-2: #f0e9d6;
-  --color-text: #221a0c;
-  --color-muted: #6d6248;
-  --color-subtle: #8c8067;
-  --color-border: #e1d4b0;
-  --color-gridline: #ece2c9;
-  --color-baseline: #d5c495;
+  --color-bg: #faf7f0;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f1ea;
+  --color-text: #0b1f3a;
+  --color-muted: #5b6577;
+  --color-subtle: #8691a3;
+  --color-border: #e3e6ec;
+  --color-gridline: #ece9e0;
+  --color-baseline: #d9dee6;
 
-  --color-accent-text: #8a6410;
-  --color-accent-wash: rgba(154, 118, 20, 0.16);
-  --color-edge: rgba(138, 100, 16, 0.35);
+  --color-accent: #c99a2e;
+  --color-accent-hover: #b38a28;
+  --color-accent-contrast: #0b1f3a;
+  --color-accent-wash: rgba(201, 154, 46, 0.12);
+  --color-edge: rgba(201, 154, 46, 0.4);
+  /* --color-accent itself is a fixed brand color, used as a solid FILL (button
+     backgrounds, active pills) with --color-accent-contrast (navy) ink on
+     top. --color-accent-text is the same gold used as a FOREGROUND (text,
+     borders, thin strokes, KPI labels) directly on the off-white/white
+     background — the brand guide's own "dourado escuro" value, picked
+     specifically for small gold text on a light surface. */
+  --color-accent-text: #9a7420;
 
-  --color-success: #8a6410;
-  --color-success-wash: rgba(138, 100, 16, 0.12);
-  --color-danger: #c1402f;
-  --color-danger-wash: rgba(193, 64, 47, 0.1);
+  /* Danger/success are not part of the brand's own palette (navy/gold only),
+     but the app needs a third, unambiguous signal for gains vs. losses —
+     ordinary green/red, distinct from the brand gold so a KPI trend is never
+     confused with the brand accent itself. */
+  --color-success: #1e8e5a;
+  --color-success-wash: rgba(30, 142, 90, 0.12);
+  --color-danger: #b3261e;
+  --color-danger-wash: rgba(179, 38, 30, 0.1);
 
-  --shadow-sm: 0 1px 2px rgba(34, 26, 12, 0.06);
-  --shadow-md: 0 10px 28px rgba(34, 26, 12, 0.08);
-  --shadow-accent: 0 6px 20px rgba(154, 120, 10, 0.22);
+  --hero-bg: #ffffff;
+  --hero-text: #0b1f3a;
+  --hero-text-muted: #5b6577;
+  --hero-accent: #c99a2e;
 
+  --shadow-sm: 0 1px 2px rgba(11, 31, 58, 0.05);
+  --shadow-md: 0 10px 28px rgba(11, 31, 58, 0.08);
+  --shadow-accent: 0 6px 20px rgba(201, 154, 46, 0.22);
+
+  /* Brand guide: one typeface only (Sora), used for everything — body text,
+     the brand name/titles, and (replacing the old JetBrains Mono convention)
+     every number too. --font-mono is kept as a token, still pointing to Sora,
+     so the many existing rules that reference it keep working unchanged. */
+  --font-display: "Sora", system-ui, sans-serif;
+  --font-body: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Sora", system-ui, sans-serif;
+
+  /* Chart series, re-picked for the new off-white surface (not yet re-run
+     through the dataviz skill's validate_palette.py — flagged as a follow-up,
+     see CLAUDE.md). Entradas = series-1 (gold), saídas = series-2 (blue). */
   --series-1: #9c7a0a;
   --series-2: #0668c4;
   --series-3: #067a5c;
@@ -113,56 +75,9 @@
   --series-6: #c22572;
 
   --diverging-pos: #9c7a0a;
-  --diverging-neg: #c1402f;
+  --diverging-neg: #b3261e;
 
-  --good-text: #1f7a49;
-}
-
-/* The auth-only screens (the split brand panel + the Painel do sistema's
-   access-request flow) stay dark regardless of [data-theme] — re-declaring
-   every token light mode touches, at higher specificity, pins them back.
-   #app-shell and #sistema-screen are NOT listed here: both follow the toggle. */
-:root[data-theme="light"] #login-screen,
-:root[data-theme="light"] #company-picker-screen,
-:root[data-theme="light"] #cadastro-screen,
-:root[data-theme="light"] #acesso-negado-screen,
-:root[data-theme="light"] #solicitar-acesso-screen,
-:root[data-theme="light"] #completar-cadastro-screen {
-  color-scheme: dark;
-  --color-bg: #060504;
-  --color-surface: #0e0c08;
-  --color-surface-2: #15120b;
-  --color-text: #f4efe4;
-  --color-muted: #9b9078;
-  --color-subtle: #8a7f66;
-  --color-border: #2a2417;
-  --color-gridline: #1c1810;
-  --color-baseline: #3a3220;
-
-  --color-accent-text: #e3b341;
-  --color-accent-wash: rgba(227, 179, 65, 0.1);
-  --color-edge: rgba(227, 179, 65, 0.34);
-
-  --color-success: #e3b341;
-  --color-success-wash: rgba(227, 179, 65, 0.12);
-  --color-danger: #ff6b5a;
-  --color-danger-wash: rgba(255, 107, 90, 0.12);
-
-  --shadow-sm: none;
-  --shadow-md: 0 12px 40px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 6px 24px rgba(227, 179, 65, 0.22);
-
-  --series-1: #b5890b;
-  --series-2: #0694fb;
-  --series-3: #0ba985;
-  --series-4: #e7620b;
-  --series-5: #a767fe;
-  --series-6: #f63398;
-
-  --diverging-pos: #b5890b;
-  --diverging-neg: #ff6b5a;
-
-  --good-text: #6fe0a0;
+  --good-text: #1e8e5a;
 }
 
 * {
@@ -244,6 +159,17 @@ html.retomando #login-screen {
 }
 
 .auth-brand {
+  /* Local overrides (2026-10-12, Finan. Capital): the brand panel is a fixed
+     navy identity, not a themed surface (same technique as .sidebar above) —
+     its own --color-text/--color-muted/--color-subtle/--color-accent-text
+     feed every descendant rule (.auth-headline, .auth-subhead, .auth-tag...)
+     through ordinary custom-property inheritance. */
+  --color-bg: #0b1f3a;
+  --color-text: #ffffff;
+  --color-muted: #b9c2d4;
+  --color-subtle: #6b7689;
+  --color-border: rgba(255, 255, 255, 0.14);
+  --color-accent-text: var(--color-accent);
   width: 57%;
   min-width: 320px;
   max-width: 820px;
@@ -265,7 +191,7 @@ html.retomando #login-screen {
 .auth-dotgrid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(227, 179, 65, 0.22) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(201, 154, 46, 0.22) 1px, transparent 1px);
   background-size: 28px 28px;
   pointer-events: none;
 }
@@ -283,6 +209,35 @@ html.retomando #login-screen {
   pointer-events: none;
 }
 
+/* Two faint outlined squares, echoing the logo's own rounded-square selo —
+   the login screen's whole decorative motif (2026-10-12, Finan. Capital),
+   replacing the earlier wireframe-cubes-plus-halftone-sphere art. No fill,
+   no gradient, no shadow, per the brand guide's "não fazer" list. */
+.auth-brand-full::before,
+.auth-brand-full::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border: 1.5px solid rgba(201, 154, 46, 0.22);
+  border-radius: 72px;
+}
+
+.auth-brand-full::before {
+  right: -140px;
+  bottom: -160px;
+  width: 520px;
+  height: 520px;
+}
+
+.auth-brand-full::after {
+  right: -40px;
+  bottom: -40px;
+  width: 300px;
+  height: 300px;
+  border-color: rgba(201, 154, 46, 0.14);
+  border-radius: 48px;
+}
+
 .art-halftone {
   color: var(--color-accent);
 }
@@ -293,6 +248,28 @@ html.retomando #login-screen {
 
 .art-accent {
   color: var(--color-accent);
+}
+
+/* Finan. Capital brand mark (2026-10-12, js/art.js's buildLogoMark): the
+   square and the "F" are deliberately colored from --color-text/--color-bg,
+   not a fixed pair. On every plain (off-white) surface — the boot screen,
+   the Painel do sistema topbar — --color-text is navy (square) and
+   --color-bg is off-white (F): the "versão principal" from the brand guide.
+   Inside .sidebar and .auth-brand specifically, which locally redeclare
+   those same two tokens for their navy panels (see .sidebar above), the
+   exact same two CSS rules automatically flip to a white square with a navy
+   F — the brand guide's "fundo escuro" variant — with no second mark and no
+   extra per-context rule needed. The dot is always the brand gold. */
+.logo-square {
+  fill: var(--color-text);
+}
+
+.logo-f {
+  fill: var(--color-bg);
+}
+
+.logo-dot {
+  fill: var(--color-accent);
 }
 
 .auth-tag {
@@ -323,6 +300,12 @@ html.retomando #login-screen {
   font-size: 22px;
   color: var(--color-text);
   letter-spacing: -0.01em;
+}
+
+/* "Finan." stays --color-text (ink), "Capital" is always the brand gold —
+   same two-color wordmark lockup used throughout the approved prototype. */
+.wordmark-capital {
+  color: var(--color-accent-text);
 }
 
 .auth-brand-copy {
@@ -596,6 +579,17 @@ html.retomando #login-screen {
 }
 
 .sidebar {
+  /* Local overrides (2026-10-12, Finan. Capital): the sidebar is a fixed navy
+     panel, not a themed surface — every descendant that reads --color-text/
+     --color-muted/--color-border/--color-accent-text picks these up through
+     ordinary CSS custom-property inheritance, so none of those rules needed
+     touching individually. */
+  --color-bg: #0b1f3a;
+  --color-text: #ffffff;
+  --color-muted: #aeb9cc;
+  --color-subtle: #7c879c;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-accent-text: var(--color-accent);
   width: 240px;
   flex-shrink: 0;
   background: var(--color-bg);
@@ -1052,14 +1046,6 @@ main {
   border-color: var(--color-edge);
 }
 
-.card h2::before {
-  content: "[ ";
-}
-
-.card h2::after {
-  content: " ]";
-}
-
 .card h2 {
   margin-top: 0;
   margin-bottom: 1rem;
@@ -1342,14 +1328,6 @@ td select {
   text-transform: uppercase;
   color: var(--color-muted);
   white-space: nowrap;
-}
-
-.stat-label::before {
-  content: "[ ";
-}
-
-.stat-label::after {
-  content: " ]";
 }
 
 /* Drops the " do período"/" de ouro (g)" qualifier once the tile itself (not
@@ -3661,7 +3639,6 @@ td select {
   break-inside: avoid;
 }
 
-/* Same "[ TÍTULO ]" convention as .card h2 / .stat-label on screen. */
 .relatorio-impressao h2 {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -3672,14 +3649,6 @@ td select {
   border-bottom: 1px solid var(--relatorio-gold);
   padding-bottom: 0.25rem;
   margin: 0 0 0.6rem;
-}
-
-.relatorio-impressao h2::before {
-  content: "[ ";
-}
-
-.relatorio-impressao h2::after {
-  content: " ]";
 }
 
 .relatorio-stats-row {
@@ -3700,14 +3669,6 @@ td select {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #666;
-}
-
-.relatorio-stat-label::before {
-  content: "[ ";
-}
-
-.relatorio-stat-label::after {
-  content: " ]";
 }
 
 .relatorio-stat-valor {

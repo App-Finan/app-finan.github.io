@@ -245,7 +245,6 @@ function renderKpis(records, prevRecords, series) {
       icon: KPI_ICONS.scale,
       iconClass: "hero",
       hero: true,
-      art: "hero",
       trend: trendFor(kpis.saldo, "saldo"),
       spark: series ? { values: series.saldo, filled: true, tone: "accent" } : null,
     })
@@ -260,7 +259,6 @@ function renderKpis(records, prevRecords, series) {
       subValue: formatBRL(kpis.valorPesoComprado),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
-      art: "ingot",
       trend: trendFor(kpis.pesoComprado, "pesoComprado"),
     })
   );
@@ -272,7 +270,6 @@ function renderKpis(records, prevRecords, series) {
       subValue: formatBRL(kpis.valorPesoVendido),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
-      art: "ingot",
       trend: trendFor(kpis.pesoVendido, "pesoVendido"),
     })
   );
