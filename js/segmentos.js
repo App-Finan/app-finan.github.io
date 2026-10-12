@@ -83,6 +83,24 @@ function formatQuantidade(valor) {
   return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${vocab("qtdUnidade")}`;
 }
 
+// Every segment's marca starts with the literal "Finan" (FinanGold,
+// FinanPet, FinanShop...) — splits it there and colors the rest gold
+// (.wordmark-capital, the same class/token "Capital" uses in "Finan.
+// Capital" elsewhere), via createElement/textContent, not innerHTML.
+// "Finan." (Outro, no suffix) just renders as plain text, unsplit.
+function renderMarcaTitulo(el, marca) {
+  el.textContent = "";
+  if (typeof marca === "string" && marca.length > 5 && marca.slice(0, 5) === "Finan") {
+    el.appendChild(document.createTextNode(marca.slice(0, 5)));
+    const resto = document.createElement("span");
+    resto.className = "wordmark-capital";
+    resto.textContent = marca.slice(5);
+    el.appendChild(resto);
+  } else {
+    el.textContent = marca;
+  }
+}
+
 // Switches the whole interface to a segment: brand, caption and every element
 // marked data-vocab="chave" (its text becomes vocab(chave)).
 function aplicarSegmento(id) {
@@ -92,7 +110,7 @@ function aplicarSegmento(id) {
     el.textContent = vocab(el.dataset.vocab);
   });
   const title = document.getElementById("sidebar-title");
-  if (title) title.textContent = seg.marca;
+  if (title) renderMarcaTitulo(title, seg.marca);
   if (typeof trocarLogoSegmento === "function") trocarLogoSegmento(segmentoAtual);
   const espInput = document.getElementById("estoque-field-pureza");
   if (espInput) {
