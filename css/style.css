@@ -1138,6 +1138,25 @@ td select {
   margin-left: auto;
 }
 
+/* Between "fits on one line" (desktop) and the dedicated mobile grid
+   (≤860px, further down), .filters-row's plain flex-wrap has a real gap:
+   .filter-group-end (two stacked buttons, taller than one input field) can
+   get assigned to the SAME wrapped line as the date fields — since that
+   line still has horizontal room — while the presets wrap to their own line
+   below; the stacked buttons then visually spill down past their own line's
+   height into the presets' line, reading as "floating" with inconsistent
+   gaps on all sides instead of sitting flush in the row's own lateral space
+   (reported 2026-10-12, live screenshot). Forcing the group to a single
+   compact row (not stacked) here sidesteps the height mismatch entirely —
+   there's nothing tall left to spill across lines. */
+@media (min-width: 721px) and (max-width: 1239px) {
+  .filter-group-end {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+  }
+}
+
 .icon-btn {
   background: none;
   border: 1px solid var(--color-border);
