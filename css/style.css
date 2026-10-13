@@ -1132,33 +1132,44 @@ td select {
 }
 
 /* Dashboard only: groups the presets and the "Baixar relatório"/"Atualizar
-   dados" pair so they stay together and, whenever there's room, share the
-   very same line as the date fields and "Tudo" (reported 2026-10-12: "a
-   ideia é que fique tudo em uma única linha, desde a primeira data até o
-   botão de atualizar") — `main`'s own `max-width: 1200px` caps how wide
-   this row can ever get (measured ~1104-1152px of usable card width at any
-   window ≥ ~1440px, wider windows don't grow it further), and the content
-   of every filter control together needs ~946px, comfortably under that
-   cap — so on any normal desktop window this now genuinely fits on one
-   line with no forcing needed. `flex: 1 1 auto` (not the old forced
-   `1 1 100%`) lets it join line 1 when there's room instead of always
-   starting a fresh line; flex-grow still lets it soak up any leftover
-   width on whichever line it ends up on, so justify-content:space-between
-   keeps "Baixar relatório"/"Atualizar dados" pinned to the row's right
-   edge either way. Only on a genuinely narrow desktop window (roughly
-   <1250px — a half-screen browser, a small laptop) does it still wrap to
-   its own second line, grouped and right-aligned same as before. At ≤860px
-   the dedicated mobile grid below already lays .filter-presets/.filter-
-   group-end out directly (display:contents removes this wrapper from the
-   box tree so the grid's `.filters-row .filter-presets` rules reach them
-   unchanged). */
+   dados" pair so they stay together and, whenever there's room, flow right
+   after the date fields and "Tudo" on the very same line, packed tight —
+   no gap in between (reported 2026-10-12/13: "a ideia é que fique tudo em
+   uma única linha" and then, once that worked but left a big gap before
+   the buttons, "não quero... espaços dentro desse bloco"). No
+   justify-content/flex-grow here on purpose — an earlier version used
+   space-between + flex-grow to pin the buttons to the row's far right
+   edge, which is exactly the stretched gap that was wrong; a plain
+   content-sized flex item just sits immediately after "Tudo" with the
+   row's normal 1.25rem gap, same as between any two of this row's items.
+   `main`'s own `max-width: 1200px` caps how wide this row can ever get
+   (measured ~1104-1152px of usable card width at any window ≥ ~1440px,
+   wider windows don't grow it further), and the content of every filter
+   control together needs ~946px, comfortably under that cap — so on any
+   normal desktop window this fits on one line with real margin to spare.
+   Only on a genuinely narrow desktop window (roughly <1000px — a
+   half-screen browser, a small laptop) does the whole group wrap to its
+   own second line, still packed together rather than split apart. At
+   ≤860px the dedicated mobile grid below already lays .filter-presets/
+   .filter-group-end out directly (display:contents removes this wrapper
+   from the box tree so the grid's `.filters-row .filter-presets` rules
+   reach them unchanged). */
 .filters-tail {
   display: flex;
-  flex: 1 1 auto;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: center;
   gap: 1.25rem;
+}
+
+/* .filter-group-end's own margin-left:auto (below) exists for the OTHER
+   filters-row screens, where it's the row's only right-hand item and needs
+   to push itself to the far edge. Inside .filters-tail that same auto
+   margin empirically still ate the tail's leftover line width and pulled
+   the buttons away from "Tudo" — the exact stretched gap the user asked
+   to remove. Zeroed here so the buttons just sit at their normal gap
+   right after the presets, nothing pushing them further. */
+.filters-tail .filter-group-end {
+  margin-left: 0;
 }
 
 .filter-group-end {
