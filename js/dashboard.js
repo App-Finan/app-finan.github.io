@@ -110,9 +110,9 @@ function buildSparkline(values, filled) {
   return svg;
 }
 
-function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, art }) {
+function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, art, wide }) {
   const tile = document.createElement("div");
-  tile.className = `stat-tile${hero ? " stat-tile-hero" : ""}`;
+  tile.className = `stat-tile${hero ? " stat-tile-hero" : ""}${wide ? " stat-tile-wide" : ""}`;
 
   const top = document.createElement("div");
   top.className = "stat-top";
@@ -259,6 +259,7 @@ function renderKpis(records, prevRecords, series) {
       subValue: formatBRL(kpis.valorPesoComprado),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
+      wide: true,
       trend: trendFor(kpis.pesoComprado, "pesoComprado"),
     })
   );
@@ -270,6 +271,7 @@ function renderKpis(records, prevRecords, series) {
       subValue: formatBRL(kpis.valorPesoVendido),
       icon: iconeDoSegmento(),
       iconClass: "neutral",
+      wide: true,
       trend: trendFor(kpis.pesoVendido, "pesoVendido"),
     })
   );

@@ -1,4 +1,4 @@
-const CACHE_NAME = "financegold-shell-v71";
+const CACHE_NAME = "financegold-shell-v74";
 const APP_SHELL = [
   "./",
   "./index.html",

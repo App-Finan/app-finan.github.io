@@ -1128,6 +1128,13 @@ td select {
 
 .filter-group-end {
   justify-content: flex-end;
+  /* .filter-group's own column layout has no align-items of its own, so the
+     default (stretch) was stretching #btn-refresh-dashboard to match
+     "Baixar relatório"'s width — a wide box with its small ⟳ icon floating
+     centered in the empty space. flex-end instead sizes each button to its
+     own content and lines their right edges up, which is what actually
+     reads as "aligned" here. */
+  align-items: flex-end;
   margin-left: auto;
 }
 
@@ -1296,7 +1303,13 @@ td select {
   grid-column: span 6;
 }
 
-.stat-tile:has(.stat-art-ingot) {
+/* .stat-tile-wide (2026-10-12): half-row KPI tiles (Compras/Vendas de ouro)
+   used to get this from `:has(.stat-art-ingot)` — coupled to the decorative
+   ingot art that buildKpiTile stopped rendering in the Finan. Capital
+   rebrand, which silently shrank these tiles to span 3 (quarter row) and
+   left half the row blank (reported live, 2026-10-12). A dedicated class,
+   set directly by buildKpiTile's `wide` flag, has no such dependency. */
+.stat-tile-wide {
   grid-column: span 6;
 }
 
@@ -2788,7 +2801,7 @@ td select {
   }
 
   .stat-tile,
-  .stat-tile:has(.stat-art-ingot) {
+  .stat-tile-wide {
     grid-column: auto;
     min-height: 0;
     padding: 0.85rem 0.9rem;

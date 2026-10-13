@@ -117,17 +117,19 @@ function buildHeroArt() {
   return wrapArt(330, 260, "art-svg", [colored("art-halftone", buildHalftone(215, 120, 108, 9, 4.1)), desenho]);
 }
 
-// Finan. Capital brand mark (2026-10-12): a rounded square with "F" and a
-// small square dot, replacing the earlier two-cube wireframe — see the
-// brand guide (guia-da-marca-finan.md) and the approved Design-canvas
-// prototype. Colored via CSS (.logo-square/.logo-f/.logo-dot in
-// css/style.css), not fixed here, so the same markup reads correctly both on
-// a plain light surface and inside the navy sidebar/auth panel.
+// Finan. Capital brand mark (2026-10-12, redrawn 2026-10-12 to fix the F's
+// alignment): a rounded square with "F" and a small square dot, replacing
+// the earlier two-cube wireframe. The F and the dot are the EXACT path data
+// from the real brand SVG the user supplied (124x124 viewBox, rx 27) — a
+// font-rendered "F" glyph (the first version of this function) could never
+// center/proportion reliably across browsers/sizes the way this fixed,
+// hand-authored shape does; `scale` maps that 124-unit artwork onto
+// whatever `size` is requested. Colored via CSS (.logo-square/.logo-f/
+// .logo-dot in css/style.css), not fixed here, so the same markup reads
+// correctly both on a plain light surface and inside the navy sidebar/auth
+// panel.
 function buildLogoMark(size) {
-  const radius = size * 0.26;
-  const fontSize = size * 0.52;
-  const dot = Math.max(2, size * 0.12);
-  const pad = size * 0.17;
+  const scale = size / 124;
   const svg = svgNode("svg", {
     viewBox: `0 0 ${size} ${size}`,
     width: String(size),
@@ -137,27 +139,17 @@ function buildLogoMark(size) {
   });
   svg.setAttribute("class", "art-logo-svg");
   svg.appendChild(
-    svgNode("rect", { x: "0", y: "0", width: String(size), height: String(size), rx: radius.toFixed(1), class: "logo-square" })
+    svgNode("rect", { x: "0", y: "0", width: String(size), height: String(size), rx: (27 * scale).toFixed(2), class: "logo-square" })
   );
-  const f = svgNode("text", {
-    x: pad.toFixed(1),
-    y: (size - pad - dot * 0.35).toFixed(1),
-    "font-family": "'Sora', system-ui, sans-serif",
-    "font-weight": "700",
-    "font-size": fontSize.toFixed(1),
-    class: "logo-f",
-  });
-  f.textContent = "F";
-  svg.appendChild(f);
-  svg.appendChild(
-    svgNode("rect", {
-      x: (size - pad - dot).toFixed(1),
-      y: (size - pad - dot).toFixed(1),
-      width: dot.toFixed(1),
-      height: dot.toFixed(1),
-      class: "logo-dot",
+  const g = svgNode("g", { transform: `scale(${scale.toFixed(6)})` });
+  g.appendChild(
+    svgNode("path", {
+      d: "M35.902 90.56V29.24H49.678V90.56ZM47.998 65.864V54.44H71.686V65.864ZM47.998 40.664V29.24H72.694V40.664Z",
+      class: "logo-f",
     })
   );
+  g.appendChild(svgNode("rect", { x: "78.086", y: "75.524", width: "14.784", height: "15.036", class: "logo-dot" }));
+  svg.appendChild(g);
   return svg;
 }
 
