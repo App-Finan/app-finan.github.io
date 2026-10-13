@@ -8,12 +8,10 @@
      default/only look (no more dark-by-default): --color-bg/--color-surface
      are the ones every card/page already reads, so repainting them here
      cascades through the whole app with no other file needing to change.
-     The former dark/"Papel" light toggle is gone — both states of
-     #theme-toggle-btn now render identically (the button and its JS/
-     localStorage wiring were deliberately left untouched, per the user's
-     "mantenha os botões/conexões" instruction, even though there is only one
-     look to show right now); a real second (dark) variant is a follow-up,
-     not decided yet. */
+     The former dark/"Papel" light toggle (and its topbar button) was
+     removed outright 2026-10-13 — it had been left wired but inert since
+     this rebrand shipped, and the user asked for it gone for good once it
+     was clear a second look wasn't coming back. There is only one look. */
   color-scheme: light;
   --color-bg: #faf7f0;
   --color-surface: #ffffff;
@@ -3633,12 +3631,10 @@ td select {
    and read poorly printed) — but still carries the app's own identity: the
    same fonts, the mono "[ bracket ]" label convention every card/stat uses
    on screen, and the brand mark, just in a print-safe gold. --relatorio-gold
-   is the exact value css/style.css's light theme already computed for gold
-   text on a light surface (--color-accent-text in [data-theme="light"]) —
-   reused as a literal hex, not var(--color-accent-text), so printing stays
-   right regardless of which theme (dark/"Papel") happens to be active on
-   screen at the time (that token would resolve to the bright dark-mode gold,
-   which fails contrast on white paper, in a dark-theme session). */
+   is a literal hex, not var(--color-accent-text), left that way even after
+   the dark/"Papel" theme toggle was removed for good (2026-10-13, there is
+   only one theme now) — it's still the correct print-safe value, just no
+   longer load-bearing against a second theme that no longer exists. */
 .relatorio-impressao {
   display: none;
   --relatorio-gold: #8a6410;

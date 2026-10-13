@@ -160,53 +160,6 @@ function setupSidebarCollapse() {
   });
 }
 
-// Light/dark toggle (direction "Papel", approved 2026-09-26). Applies to the
-// whole document (css/style.css's [data-theme="light"] block), but the
-// auth-only screens are re-pinned to dark there regardless — #app-shell and
-// #sistema-screen are the only screens that actually change look. The
-// attribute itself is already set as early as possible, before this runs
-// (see js/inicio.js, in <head>), so there is no flash when #app-shell first
-// becomes visible; this only needs to sync the button and wire the click.
-const THEME_KEY = "financegold_theme";
-
-function loadThemePref() {
-  try {
-    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
-  } catch (err) {
-    return "dark";
-  }
-}
-
-function saveThemePref(theme) {
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch (err) {
-    // per-browser convenience only — ignore if storage is unavailable
-  }
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  const btn = document.getElementById("theme-toggle-btn");
-  if (!btn) return;
-  const offerLight = theme !== "light";
-  btn.title = offerLight ? "Mudar para modo claro" : "Mudar para modo escuro";
-  btn.setAttribute("aria-label", btn.title);
-  const sun = btn.querySelector(".icon-theme-sun");
-  const moon = btn.querySelector(".icon-theme-moon");
-  if (sun) sun.hidden = !offerLight;
-  if (moon) moon.hidden = offerLight;
-}
-
-function setupThemeToggle() {
-  applyTheme(loadThemePref());
-  document.getElementById("theme-toggle-btn").addEventListener("click", () => {
-    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
-    applyTheme(next);
-    saveThemePref(next);
-  });
-}
-
 // Purely a UI convenience — hides screens a role shouldn't casually use.
 // Not a security boundary (see js/roles.js). These "Novo ..." buttons live on
 // each listing screen now (not the sidebar — see index.html), so this just
@@ -243,6 +196,5 @@ function setupNavigation() {
 
   setupSidebarCollapse();
   setupSidebarMobileDrawer();
-  setupThemeToggle();
   setupCommandPalette();
 }
