@@ -168,7 +168,7 @@ function showCompanyPicker(companies, token, email) {
     const seg = getSegmento(tenant.segmento);
     const legenda = document.createElement("small");
     legenda.className = "company-picker-seg";
-    legenda.textContent = `${seg.nome} · ${seg.marca}`;
+    legenda.textContent = seg.nome;
     btn.appendChild(legenda);
     btn.addEventListener("click", () => resolveProfileAndEnter(tenant, token, email));
     list.appendChild(btn);

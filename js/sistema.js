@@ -56,7 +56,7 @@ function renderEmpresasSistema() {
     meta.className = "pedido-meta";
     const masters = empresa.masters.map((m) => m.email).join(", ") || "sem administrador";
     const seg = getSegmento(empresa.segmento);
-    meta.textContent = `${seg.nome} (${seg.marca}) · ${empresa.origem === "fixa" ? "cadastrada no servidor" : "criada pelo app"} · ${empresa.usuarios} pessoa(s) · Master: ${masters}`;
+    meta.textContent = `${seg.nome} · ${empresa.origem === "fixa" ? "cadastrada no servidor" : "criada pelo app"} · ${empresa.usuarios} pessoa(s) · Master: ${masters}`;
     li.appendChild(meta);
     list.appendChild(li);
   });

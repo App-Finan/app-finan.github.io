@@ -89,18 +89,21 @@ function seedRow_(n, nome, extra) {
   if (extra) row.push(extra);
   return row;
 }
-// Business segments. "id" is what travels between the app and this script; the
-// brand is only used in titles of the spreadsheets created here. Keep the ids in
-// sync with SEGMENTOS in js/segmentos.js.
+// Business segments. "id" is what travels between the app and this script,
+// and only picks the WORDS on the company's new spreadsheet template (qtd/
+// qtdEstoque/esp below) — per-segment brand names (FinanGold, FinanPet...)
+// were removed 2026-10-12; every company's spreadsheet title now just says
+// "Finan." (see actionCreateCompany_ below). Keep the ids in sync with
+// SEGMENTOS in js/segmentos.js.
 const SEGMENTO_PADRAO = "joalheria";
 const SEGMENTOS = {
-  joalheria: { marca: "FinanGold", qtd: "Peso (g)", qtdEstoque: "Peso em grama", esp: "Pureza (k)" },
-  petshop: { marca: "FinanPet" },
-  comercio: { marca: "FinanShop" },
-  servicos: { marca: "FinanServ" },
-  alimentacao: { marca: "FinanFood" },
-  saude: { marca: "FinanCare" },
-  outro: { marca: "Finan." },
+  joalheria: { qtd: "Peso (g)", qtdEstoque: "Peso em grama", esp: "Pureza (k)" },
+  petshop: {},
+  comercio: {},
+  servicos: {},
+  alimentacao: {},
+  saude: {},
+  outro: {},
 };
 function segmentoValido_(id) {
   return typeof id === "string" && Object.prototype.hasOwnProperty.call(SEGMENTOS, id) ? id : SEGMENTO_PADRAO;
@@ -796,7 +799,7 @@ function actionCreateCompany_(deps, email, body) {
   }
 
   return deps.lock(() => {
-    const spreadsheetId = deps.sheets.createCompanySpreadsheet(nome + " — " + SEGMENTOS[segmento].marca, nome, segmento);
+    const spreadsheetId = deps.sheets.createCompanySpreadsheet(nome + " — Finan.", nome, segmento);
     const rows = [[ownerEmail, ownerNome, ROLE_MASTER]];
     // Separation of duties: the system administrator only enters a company's
     // data if they explicitly ask for it (support). Default: not a member.

@@ -110,7 +110,7 @@ function buildSparkline(values, filled) {
   return svg;
 }
 
-function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, art, wide }) {
+function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, wide }) {
   const tile = document.createElement("div");
   tile.className = `stat-tile${hero ? " stat-tile-hero" : ""}${wide ? " stat-tile-wide" : ""}`;
 
@@ -144,13 +144,6 @@ function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, tre
   if (value.length > 13) valueEl.classList.add("stat-value-xlong");
   else if (value.length > 10) valueEl.classList.add("stat-value-long");
   valueEl.textContent = value;
-
-  if (art) {
-    const artSlot = document.createElement("div");
-    artSlot.className = `stat-art stat-art-${art}`;
-    artSlot.appendChild(art === "hero" ? buildHeroArt() : buildSegmentArt(segmentoAtual));
-    tile.appendChild(artSlot);
-  }
 
   tile.appendChild(top);
   tile.appendChild(valueEl);
