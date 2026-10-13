@@ -653,9 +653,16 @@ html.retomando #login-screen {
 .sidebar-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1.08rem;
   letter-spacing: -0.01em;
   color: var(--color-text);
+  /* "Finan. Capital" wrapped to two lines (reported 2026-10-12, live
+     screenshot) — the sidebar's flex width leaves only a slim margin for
+     the brand row (logo + gap + text) next to the collapse button, so the
+     text flex-shrunk below its one-line width even though it fits. nowrap
+     stops the shrink; the slightly smaller size (was 1.2rem) gives real
+     margin instead of sitting right at the edge. */
+  white-space: nowrap;
 }
 
 .empresa-badge {
@@ -1124,6 +1131,26 @@ td select {
 .filter-group-grow {
   flex: 1;
   min-width: 200px;
+}
+
+/* Dashboard only: groups the presets and the "Baixar relatório"/"Atualizar
+   dados" pair so they always share ONE flex line together (reported
+   2026-10-12: the button pair kept wrapping to its own separate line below
+   presets, ending further right than "Tudo" instead of sitting right after
+   it). flex-basis:100% forces this whole group onto its own row below the
+   date fields, then justify-content:space-between keeps presets on the left
+   and the buttons flush right at the END of that same row — i.e. right
+   after "Tudo", not off on a mismatched line. At ≤860px the dedicated
+   mobile grid below already lays .filter-presets/.filter-group-end out
+   directly (display:contents removes this wrapper from the box tree so the
+   grid's `.filters-row .filter-presets` rules reach them unchanged). */
+.filters-tail {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
 }
 
 .filter-group-end {
@@ -2351,13 +2378,23 @@ td select {
     align-items: end;
   }
 
-  .filters-row > .filter-presets,
-  .filters-row > .filter-group-grow,
-  .filters-row > .filter-group-end {
+  /* The Dashboard's desktop-only .filters-tail wrapper (groups presets +
+     the button pair on one shared line — see its own comment above) would
+     otherwise sit between .filters-row and these two on the mobile grid;
+     display:contents removes it from the box tree so .filter-presets and
+     .filter-group-end become direct grid items again, exactly as on a
+     filters-row with no wrapper (every other list screen). */
+  .filters-tail {
+    display: contents;
+  }
+
+  .filters-row .filter-presets,
+  .filters-row .filter-group-grow,
+  .filters-row .filter-group-end {
     grid-column: 1 / -1;
   }
 
-  .filters-row > .filter-group-end {
+  .filters-row .filter-group-end {
     order: 4;
     /* The desktop base rule made this a row (see css comment there); on
        the mobile grid both children are forced to width:100% below, which
@@ -2383,7 +2420,7 @@ td select {
     font-size: 0.85rem;
   }
 
-  .filters-row > .filter-presets {
+  .filters-row .filter-presets {
     order: 3;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2916,7 +2953,7 @@ td select {
     min-height: 0;
   }
 
-  .filters-row > .filter-presets {
+  .filters-row .filter-presets {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
