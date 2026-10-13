@@ -1127,34 +1127,18 @@ td select {
 }
 
 .filter-group-end {
+  /* .filter-group's own column layout (built for a label-above-input field)
+     doesn't fit two independent action buttons — a stacked column reads as
+     sparse/disorganized whenever it isn't sharing a flex line with
+     something coincidentally as tall (reported again 2026-10-12: fine next
+     to date fields at some widths, visibly floating with empty space above
+     it when it wraps to its own line at ≥1240px). A single compact row at
+     every desktop width (≥721px) removes the inconsistency outright instead
+     of just narrowing the width range where it showed up. */
+  flex-direction: row;
   justify-content: flex-end;
-  /* .filter-group's own column layout has no align-items of its own, so the
-     default (stretch) was stretching #btn-refresh-dashboard to match
-     "Baixar relatório"'s width — a wide box with its small ⟳ icon floating
-     centered in the empty space. flex-end instead sizes each button to its
-     own content and lines their right edges up, which is what actually
-     reads as "aligned" here. */
-  align-items: flex-end;
+  align-items: center;
   margin-left: auto;
-}
-
-/* Between "fits on one line" (desktop) and the dedicated mobile grid
-   (≤860px, further down), .filters-row's plain flex-wrap has a real gap:
-   .filter-group-end (two stacked buttons, taller than one input field) can
-   get assigned to the SAME wrapped line as the date fields — since that
-   line still has horizontal room — while the presets wrap to their own line
-   below; the stacked buttons then visually spill down past their own line's
-   height into the presets' line, reading as "floating" with inconsistent
-   gaps on all sides instead of sitting flush in the row's own lateral space
-   (reported 2026-10-12, live screenshot). Forcing the group to a single
-   compact row (not stacked) here sidesteps the height mismatch entirely —
-   there's nothing tall left to spill across lines. */
-@media (min-width: 721px) and (max-width: 1239px) {
-  .filter-group-end {
-    flex-direction: row;
-    align-items: center;
-    width: 100%;
-  }
 }
 
 .icon-btn {
@@ -2375,6 +2359,10 @@ td select {
 
   .filters-row > .filter-group-end {
     order: 4;
+    /* The desktop base rule made this a row (see css comment there); on
+       the mobile grid both children are forced to width:100% below, which
+       only makes sense stacked, not side by side. */
+    flex-direction: column;
   }
 
   .filters-row .filter-group input,
