@@ -1134,19 +1134,29 @@ td select {
 }
 
 /* Dashboard only: groups the presets and the "Baixar relatório"/"Atualizar
-   dados" pair so they always share ONE flex line together (reported
-   2026-10-12: the button pair kept wrapping to its own separate line below
-   presets, ending further right than "Tudo" instead of sitting right after
-   it). flex-basis:100% forces this whole group onto its own row below the
-   date fields, then justify-content:space-between keeps presets on the left
-   and the buttons flush right at the END of that same row — i.e. right
-   after "Tudo", not off on a mismatched line. At ≤860px the dedicated
-   mobile grid below already lays .filter-presets/.filter-group-end out
-   directly (display:contents removes this wrapper from the box tree so the
-   grid's `.filters-row .filter-presets` rules reach them unchanged). */
+   dados" pair so they stay together and, whenever there's room, share the
+   very same line as the date fields and "Tudo" (reported 2026-10-12: "a
+   ideia é que fique tudo em uma única linha, desde a primeira data até o
+   botão de atualizar") — `main`'s own `max-width: 1200px` caps how wide
+   this row can ever get (measured ~1104-1152px of usable card width at any
+   window ≥ ~1440px, wider windows don't grow it further), and the content
+   of every filter control together needs ~946px, comfortably under that
+   cap — so on any normal desktop window this now genuinely fits on one
+   line with no forcing needed. `flex: 1 1 auto` (not the old forced
+   `1 1 100%`) lets it join line 1 when there's room instead of always
+   starting a fresh line; flex-grow still lets it soak up any leftover
+   width on whichever line it ends up on, so justify-content:space-between
+   keeps "Baixar relatório"/"Atualizar dados" pinned to the row's right
+   edge either way. Only on a genuinely narrow desktop window (roughly
+   <1250px — a half-screen browser, a small laptop) does it still wrap to
+   its own second line, grouped and right-aligned same as before. At ≤860px
+   the dedicated mobile grid below already lays .filter-presets/.filter-
+   group-end out directly (display:contents removes this wrapper from the
+   box tree so the grid's `.filters-row .filter-presets` rules reach them
+   unchanged). */
 .filters-tail {
   display: flex;
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
