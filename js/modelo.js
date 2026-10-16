@@ -3,12 +3,24 @@
 // real .xlsx (opens in Excel, Google Sheets, Numbers, LibreOffice), built here
 // with no library: an .xlsx is a zip of small XML files, written uncompressed.
 //
-// Tabs: Instruções, Lançamento, Estoque, the support lists, and Exemplo (filled
-// rows to copy the idea from — the data tabs themselves start empty). The
-// headers are EXACTLY the ones the app (and the server-created companies) use,
-// with the words of the chosen segment. Helpful fill-in touches: date and money
-// formats, dropdowns for Tipo / Vendido?, header row frozen, list codes and
-// "código - nome" filled automatically by formulas.
+// Tabs: Instruções, Lançamento, Estoque, Fornecedores, Contas a Pagar, Contas a
+// Receber, the support lists, and Exemplo (filled rows to copy the idea from —
+// the data tabs themselves start empty). The headers are EXACTLY the ones the
+// app (and the server-created companies, see companyTemplate_ in
+// apps-script/Code.gs) use, with the words of the chosen segment. Helpful
+// fill-in touches: date and money formats, dropdowns for Tipo / Vendido? /
+// Status / Recorrente, header row frozen, list codes and "código - nome"
+// filled automatically by formulas.
+//
+// Fornecedores/Contas a Pagar/Contas a Receber (2026-10-16): added because
+// Ipanema Joias' own live sheet predates these tabs (ERP Fase 1 shipped after
+// it was already in use) and this file used to only mirror the ORIGINAL
+// columns — but every NEW company created from this template is meant to
+// have them from day one, matching companyTemplate_ exactly (same tab names,
+// same header words, segment-independent — these three never change wording
+// by segment, unlike Lançamento/Estoque). Keep in sync with
+// FORNECEDORES_HEADERS/CONTAS_HEADERS in apps-script/Code.gs if either ever
+// changes there.
 //
 // Everything here is static text chosen from a fixed list: no user data goes
 // into the file.
@@ -97,6 +109,11 @@ function cabecalhosDoModelo(idSegmento) {
       "Produto", "Tipo", "Marca", "Condição", "Estado", joia ? "Peso em grama" : "Quantidade", joia ? "Pureza (k)" : "Especificação",
       "Valor de Custo", "Valor de venda", "Data de Compra", "Data de Venda", "Comprador", "Vendedor", "Loja", "Vendido?", "Observação",
     ],
+    // Segment-independent (same wording for every segment), matching
+    // FORNECEDORES_HEADERS/CONTAS_HEADERS in apps-script/Code.gs exactly.
+    fornecedores: ["Nome", "CNPJ/CPF", "Categoria", "Telefone", "E-mail", "Prazo de pagamento", "Observação", "Status"],
+    contasPagar: ["Descrição", "Fornecedor", "Categoria", "Valor", "Vencimento", "Status", "Pago em", "Recorrente", "Observação", "Avisado em"],
+    contasReceber: ["Descrição", "Cliente", "Categoria", "Valor", "Vencimento", "Status", "Recebido em", "Recorrente", "Observação", "Avisado em"],
     listas: listas,
     categoria: listas.concat(["Status"]),
   };
@@ -237,8 +254,9 @@ function abaInstrucoes(idSegmento) {
   texto("1. Não apague nem mude os títulos da primeira linha de cada aba (Data, Valor, Tipo...). É por eles que o Finan. entende cada coluna.", 8, 34);
   texto("2. Aba \"Lançamento\": uma linha para cada entrada ou saída de dinheiro. Preencha da esquerda para a direita.", 8, 34);
   texto("3. Aba \"Estoque\": uma linha para cada item que a empresa tem para vender.", 8, 20);
-  texto("4. Abas de listas (Lojas, Contas, Categoria, Pessoa...): digite só o NOME, um por linha. O código e o \"código - nome\" aparecem sozinhos.", 8, 34);
-  texto("5. Veja a aba \"Exemplo\": ela mostra linhas já preenchidas. As abas de verdade começam vazias.", 8, 34);
+  texto("4. Abas \"Fornecedores\", \"Contas a Pagar\" e \"Contas a Receber\": opcionais, para controlar fornecedores e contas do financeiro. Pode deixar vazias se não for usar agora.", 8, 34);
+  texto("5. Abas de listas (Lojas, Contas, Categoria, Pessoa...): digite só o NOME, um por linha. O código e o \"código - nome\" aparecem sozinhos.", 8, 34);
+  texto("6. Veja a aba \"Exemplo\": ela mostra linhas já preenchidas. As abas de verdade começam vazias.", 8, 34);
   vazia();
   texto("REGRAS PARA NÃO ERRAR", 9, 24);
   texto("• Data: no formato dia/mês/ano, por exemplo 05/09/2026.", 8);
@@ -272,6 +290,33 @@ function abaInstrucoes(idSegmento) {
     [est[10], "Quando foi vendido (preencha ao vender)."], [est[11], "Quem comprou."], [est[12], "Quem vendeu."], [est[13], "Onde está."],
     [est[14], "Sim ou Não."], [est[15], "Qualquer anotação."],
   ].forEach(([col, ajuda]) => texto(`${col}: ${ajuda}`, 8));
+  vazia();
+  texto("O QUE COLOCAR EM CADA COLUNA — FORNECEDORES", 9, 24);
+  [
+    ["Nome", "O nome do fornecedor."],
+    ["CNPJ/CPF", "Opcional."],
+    ["Categoria", "Para organizar: matéria-prima, serviços..."],
+    ["Telefone", "Opcional."],
+    ["E-mail", "Opcional."],
+    ["Prazo de pagamento", "Ex.: 30 dias (texto livre)."],
+    ["Observação", "Qualquer anotação."],
+    ["Status", "Ativo ou Inativo. Deixe Ativo enquanto usar este fornecedor."],
+  ].forEach(([col, ajuda]) => texto(`${col}: ${ajuda}`, 8, 20));
+  vazia();
+  texto("O QUE COLOCAR EM CADA COLUNA — CONTAS A PAGAR / CONTAS A RECEBER", 9, 24);
+  texto("As duas abas têm o mesmo formato; só muda \"Fornecedor\" (a pagar) por \"Cliente\" (a receber).", 8, 20);
+  [
+    ["Descrição", "O que é a conta, ex.: \"Contador\", \"Aluguel\"."],
+    ["Fornecedor / Cliente", "Quem vai receber ou pagar."],
+    ["Categoria", "Para organizar, igual ao Lançamento."],
+    ["Valor", "Sempre positivo, sem \"R$\"."],
+    ["Vencimento", "Data em que vence, dia/mês/ano."],
+    ["Status", "Pendente, Pago/Recebido ou Cancelada."],
+    ["Pago em / Recebido em", "Deixe em branco — o Finan. preenche sozinho quando a conta é paga/recebida pelo app."],
+    ["Recorrente", "Sim ou Não. Sim repete automaticamente todo mês depois de paga/recebida."],
+    ["Observação", "Qualquer anotação."],
+    ["Avisado em", "Deixe em branco — uso interno do Finan. para não repetir avisos por e-mail."],
+  ].forEach(([col, ajuda]) => texto(`${col}: ${ajuda}`, 8, 20));
   vazia();
   texto("DEPOIS DE PREENCHER", 9, 24);
   texto("Este arquivo tem exatamente as abas e colunas que o Finan. usa. Você pode preencher aqui (no Excel, no Google Planilhas ou no Numbers) e depois copiar e colar as linhas na planilha da sua empresa, mantendo a mesma ordem das colunas.", 8, 50);
@@ -340,6 +385,19 @@ function abaExemplo(idSegmento) {
   const te = ["", "", "", "", "", "", "", "m", "m", "d", "d", "", "", "", "", ""];
   dados(["Item de exemplo 1", "Grupo A", "Marca X", "Novo", "Venda direta", joia ? 4.2 : 10, joia ? 18 : "Tamanho M", 320, "", serialModelo(2026, 8, 3), "", "", "", "Loja Centro", "Não", ""], te);
   dados(["Item de exemplo 2", "Grupo B", "Marca Y", "Seminovo", "Consignado", joia ? 9.5 : 4, joia ? "" : "Cor azul", 510, 700, serialModelo(2026, 7, 1), serialModelo(2026, 9, 2), "Carlos", "Ana", "Loja Norte", "Sim", "Vendido no crediário"], te);
+  n += 1;
+  titulo("EXEMPLO — aba Fornecedores");
+  cabecalho(cab.fornecedores);
+  dados(["Fornecedor de exemplo", "12.345.678/0001-90", "Matéria-prima", "(21) 99999-0000", "contato@exemplo.com", "30 dias", "", "Ativo"], []);
+  n += 1;
+  titulo("EXEMPLO — aba Contas a Pagar (deixe \"Pago em\" e \"Avisado em\" em branco: o Finan. preenche sozinho)");
+  cabecalho(cab.contasPagar);
+  const tcp = ["", "", "", "m", "d", "", "d", "", "", "d"];
+  dados(["Contador", "Fornecedor de exemplo", "Serviços", 450, serialModelo(2026, 10, 30), "Pendente", "", "Sim", "", ""], tcp);
+  n += 1;
+  titulo("EXEMPLO — aba Contas a Receber (deixe \"Recebido em\" e \"Avisado em\" em branco: o Finan. preenche sozinho)");
+  cabecalho(cab.contasReceber);
+  dados(["Venda a prazo", "Cliente de exemplo", "Vendas", 1200, serialModelo(2026, 11, 5), "Pendente", "", "Não", "", ""], tcp);
   return planilhaXml({ linhas, larguras: cab.estoque.map(() => ({ largura: 18 })), cor: "FF6B6558" });
 }
 
@@ -368,6 +426,39 @@ function gerarModeloXlsx(idSegmento) {
         dinheiro: [7, 8],
         largas: [0, 15],
         validacoes: [{ faixa: `O2:O${LINHAS_PREPARADAS}`, opcoes: "Sim,Não" }],
+      }),
+    },
+    {
+      nome: "Fornecedores",
+      xml: abaDeDados(cab.fornecedores, {
+        datas: [],
+        dinheiro: [],
+        largas: [6],
+        validacoes: [{ faixa: `H2:H${LINHAS_PREPARADAS}`, opcoes: "Ativo,Inativo" }],
+      }),
+    },
+    {
+      nome: "Contas a Pagar",
+      xml: abaDeDados(cab.contasPagar, {
+        datas: [4, 6, 9],
+        dinheiro: [3],
+        largas: [8],
+        validacoes: [
+          { faixa: `F2:F${LINHAS_PREPARADAS}`, opcoes: "Pendente,Pago,Cancelada" },
+          { faixa: `H2:H${LINHAS_PREPARADAS}`, opcoes: "Sim,Não" },
+        ],
+      }),
+    },
+    {
+      nome: "Contas a Receber",
+      xml: abaDeDados(cab.contasReceber, {
+        datas: [4, 6, 9],
+        dinheiro: [3],
+        largas: [8],
+        validacoes: [
+          { faixa: `F2:F${LINHAS_PREPARADAS}`, opcoes: "Pendente,Recebido,Cancelada" },
+          { faixa: `H2:H${LINHAS_PREPARADAS}`, opcoes: "Sim,Não" },
+        ],
       }),
     },
   ];
