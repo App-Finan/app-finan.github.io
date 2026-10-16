@@ -636,6 +636,7 @@ async function startApp(token, nome, perfil, linha) {
     if (listasPadrao) initListasAdmin();
   }
   if (isMaster(perfil)) initConectar();
+  if (isMaster(perfil)) initFiscalConfig();
 
   if (isMaster(perfil)) {
     try {

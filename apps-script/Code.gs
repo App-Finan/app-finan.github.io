@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-10-push-e-whatsapp";
+const GATEWAY_VERSION = "2026-10-16-configuracao-fiscal";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -67,10 +67,26 @@ const CONTAS_HEADERS = {
   [CONTAS_PAGAR_TAB]: ["Descrição", "Fornecedor", "Categoria", "Valor", "Vencimento", "Status", "Pago em", "Recorrente", "Observação", "Avisado em"],
   [CONTAS_RECEBER_TAB]: ["Descrição", "Cliente", "Categoria", "Valor", "Vencimento", "Status", "Recebido em", "Recorrente", "Observação", "Avisado em"],
 };
+// "Configuração Fiscal" tab (2026-10-16): where a company's Master stores the
+// NF-e provider credentials (provedor, ambiente, CNPJ emissor, token/chave de
+// API) for when real automated NF emission is built — this ONLY stores the
+// configuration today, nothing here actually calls a provider yet. Deliberately
+// NOT pre-seeded in companyTemplate_ (lazy-created on first use, like
+// Configuração) and NOT in READ_TABS/WRITE_TABS: it holds a secret, so both
+// reads and writes are Master-only, stricter than Configuração (readable by
+// everyone) and closer to Usuários. Always exactly one data row (A2:E2) —
+// there is only ever one fiscal configuration per company.
+const FISCAL_TAB = "Configuração Fiscal";
+const FISCAL_HEADERS = ["Provedor", "Ambiente", "CNPJ Emissor", "Token/Chave de API", "Atualizado em"];
 // Tab CREATION is Master-only (actionAddTab_); writing ROWS in an existing one
 // is Editor+Master (WRITE_TABS) — same split as Fornecedores, same reasoning
 // as Configuração: creating a tab is a structural change to the spreadsheet.
-const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB];
+// FISCAL_TAB is the one exception: it is listed here too (so actionAddTab_
+// lets a Master create it) but deliberately left OUT of WRITE_TABS below —
+// its row writes are special-cased Master-only in actionUpdateValues_, the
+// same way Configuração's are, because this tab holds an API credential, not
+// ordinary business data an Editor should see or touch.
+const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, FISCAL_TAB];
 const LOOKUP_TABS = ["Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
 const MAX_COMPANIES = 200;
 const REQUESTS_TAB = "Solicitações";
@@ -1034,6 +1050,8 @@ function actionUpdateValues_(deps, email, access, spreadsheet, body) {
     if (!canWriteUsuarios_(access, email, parsed, row)) throw denied_();
   } else if (parsed.tab === CONFIG_TAB) {
     if (access.perfil !== ROLE_MASTER || !validConfigRow_(parsed, row)) throw denied_();
+  } else if (parsed.tab === FISCAL_TAB) {
+    if (access.perfil !== ROLE_MASTER || !validFiscalRow_(parsed, row)) throw denied_();
   } else {
     const cfg = loadConfigTabs_(deps, body.spreadsheetId);
     const isLookup = LOOKUP_TABS.indexOf(parsed.tab) !== -1 || cfg.listas.indexOf(parsed.tab) !== -1;
@@ -1073,6 +1091,18 @@ function validConfigRow_(parsed, row) {
   if (aba.trim() === "" || aba.length > 100 || aba === USUARIOS_TAB || aba === CONFIG_TAB) return false;
   const okPapel = CONFIG_ROLES.indexOf(papel) !== -1 || (papel.indexOf("lista:") === 0 && CONFIG_LIST_KEYS.indexOf(papel.slice(6)) !== -1);
   return okPapel;
+}
+
+// Configuração Fiscal: always exactly 5 cells, either the header row (A1:E1)
+// or the one data row (A2:E2) — there is no "next empty row" scan for this
+// tab, it never grows past one row. The real security boundary is the
+// Master-only role check right before this call, not this shape check; this
+// is only basic sanity (same spirit as validConfigRow_ above), not a
+// provider-specific validation, since no provider has been chosen yet.
+function validFiscalRow_(parsed, row) {
+  if (parsed.cells !== "A1:E1" && parsed.cells !== "A2:E2") return false;
+  if (row.length !== 5) return false;
+  return row.every((v) => typeof v === "string" && v.length <= 500);
 }
 
 // Usuários writes: a Master may write anywhere on the tab; the very first

@@ -1111,6 +1111,46 @@
             </form>
             <p id="listas-admin-status" class="status-message"></p>
           </section>
+
+          <section class="card" id="ajustes-fiscal-card">
+            <h2>Configuração Fiscal</h2>
+            <p class="field-hint">Espaço para guardar os dados do provedor de emissão de NF-e (ex.: Focus NFe, PlugNotas, eNotas) para quando o certificado digital estiver pronto. Salvar aqui ainda não emite nenhuma nota — é só a configuração, guardada na planilha desta empresa.</p>
+            <form id="fiscal-config-form" class="lancamento-form">
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="fiscal-provedor">Provedor</label>
+                  <select id="fiscal-provedor">
+                    <option value="">Ainda não decidido</option>
+                    <option value="Focus NFe">Focus NFe</option>
+                    <option value="PlugNotas">PlugNotas</option>
+                    <option value="eNotas">eNotas</option>
+                    <option value="NFe.io">NFe.io</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="fiscal-ambiente">Ambiente</label>
+                  <select id="fiscal-ambiente">
+                    <option value="Homologação">Homologação (testes)</option>
+                    <option value="Produção">Produção</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="fiscal-cnpj">CNPJ emissor</label>
+                  <input type="text" id="fiscal-cnpj" maxlength="30" placeholder="00.000.000/0000-00">
+                </div>
+                <div class="form-field">
+                  <label for="fiscal-token">Token / chave de API do provedor</label>
+                  <div class="campo-senha"><input type="password" id="fiscal-token" maxlength="300" placeholder="Cole aqui a chave fornecida pelo provedor"></div>
+                </div>
+              </div>
+              <p class="field-hint" id="fiscal-status-nota"></p>
+              <div class="form-actions">
+                <button type="submit">Salvar configuração</button>
+                <span id="fiscal-config-status" class="status-message"></span>
+              </div>
+            </form>
+          </section>
         </div>
       </section>
     </main>
@@ -1155,6 +1195,7 @@
 <script src="js/usuarios.js"></script>
 <script src="js/usuarios-admin.js"></script>
 <script src="js/listas-admin.js"></script>
+<script src="js/fiscal.js"></script>
 <script src="js/modelo.js"></script>
 <script src="js/conectar.js"></script>
 <script src="js/sistema.js"></script>
