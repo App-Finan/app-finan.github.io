@@ -40,7 +40,6 @@ function formatLancamentoData(date) {
   return date ? date.toLocaleDateString("pt-BR", { timeZone: "UTC" }) : "";
 }
 
-const LANC_COLUNAS = ["linha", "data", "loja", "conta", "empresa", "categoria", "valor", "tipo", "peso", "pessoa", "observacao"];
 const LANC_MAX_EXTRAS = 8;
 
 // Names of the sheet's own extra columns (the ones the app has no field for),
@@ -60,31 +59,71 @@ function valorDeExtra(record, nome) {
   return achado ? String(achado.valor) : "";
 }
 
-// A column that no row uses (the sheet has no such column) is hidden, so a
-// simple sheet does not show empty "Empresa" / "Conta" columns.
-function colunasSemDados(records) {
-  const vazias = {};
-  LANC_COLUNAS.forEach((chave) => {
-    if (chave === "linha" || chave === "data" || chave === "valor") return;
-    vazias[chave] = records.every((r) => r[chave] === null || r[chave] === undefined || r[chave] === "");
-  });
-  return vazias;
+// One card per lançamento (2026-10-16, replacing a literal spreadsheet-style
+// table that showed every column — including ones empty for every row — as
+// its own cell). Same visual language as .estoque-card/.fornecedor-card
+// (reused directly, not re-cloned, same as Contas a Pagar/Receber already
+// do — see css/style.css): a title line, a muted meta line that only ever
+// joins the fields a given row actually has (nothing blank ever prints),
+// and the value as a colored pill instead of a plain cell. The underlying
+// data — js/lancamentos.js's fetch/parse and js/form.js's write path, which
+// is what "alimenta a planilha" (feeds the sheet) — is untouched; this is a
+// display-only change.
+function buildLancamentoCard(r, nomesExtra) {
+  const card = document.createElement("div");
+  card.className = "fornecedor-card";
+  card.dataset.linha = String(r.linha);
+
+  const id = document.createElement("span");
+  id.className = "estoque-id";
+  id.textContent = `#${r.linha}`;
+  card.appendChild(id);
+
+  const info = document.createElement("div");
+  info.className = "fornecedor-info";
+
+  const title = document.createElement("div");
+  title.className = "fornecedor-title";
+  title.textContent = [formatLancamentoData(r.data), r.categoria].filter(Boolean).join(" · ");
+  info.appendChild(title);
+
+  const meta = document.createElement("div");
+  meta.className = "fornecedor-meta";
+  const metaParts = [r.loja, r.conta, r.empresa, r.pessoa];
+  if (r.peso != null) metaParts.push(formatQuantidade(r.peso));
+  meta.textContent = metaParts.filter(Boolean).join(" · ");
+  info.appendChild(meta);
+
+  const extrasTexto = nomesExtra.map((nome) => valorDeExtra(r, nome)).filter(Boolean);
+  if (extrasTexto.length) {
+    const extrasEl = document.createElement("div");
+    extrasEl.className = "fornecedor-meta";
+    extrasEl.textContent = nomesExtra
+      .map((nome) => (valorDeExtra(r, nome) ? `${nome}: ${valorDeExtra(r, nome)}` : null))
+      .filter(Boolean)
+      .join(" · ");
+    info.appendChild(extrasEl);
+  }
+
+  if (r.observacao) {
+    const obs = document.createElement("div");
+    obs.className = "fornecedor-obs";
+    obs.textContent = r.observacao;
+    info.appendChild(obs);
+  }
+
+  card.appendChild(info);
+
+  const valor = document.createElement("span");
+  valor.className = `fornecedor-status ${r.tipo === "Entrada" ? "lanc-valor-entrada" : "lanc-valor-saida"}`;
+  valor.textContent = formatBRL(r.valor);
+  card.appendChild(valor);
+
+  return card;
 }
 
 function renderLancamentoListaTable() {
   const nomesExtra = nomesDeExtras(allLancamentos);
-  const vazias = colunasSemDados(allLancamentos);
-  const headRow = document.querySelector("#lancamento-lista-table thead tr");
-  headRow.querySelectorAll(".th-extra").forEach((th) => th.remove());
-  Array.from(headRow.children).forEach((th, i) => {
-    th.hidden = Boolean(vazias[LANC_COLUNAS[i]]);
-  });
-  nomesExtra.forEach((nome) => {
-    const th = document.createElement("th");
-    th.className = "th-extra";
-    th.textContent = nome;
-    headRow.appendChild(th);
-  });
 
   const filters = getLancamentoListaFilters();
   const filtered = filterLancamentosLista(allLancamentos, filters)
@@ -102,42 +141,18 @@ function renderLancamentoListaTable() {
   moreButton.hidden = shown >= filtered.length;
   moreButton.textContent = `Mostrar mais (${filtered.length - shown} restantes)`;
 
-  const tbody = document.querySelector("#lancamento-lista-table tbody");
-  tbody.innerHTML = "";
+  const container = document.getElementById("lancamento-lista-container");
+  container.innerHTML = "";
 
-  filtered.slice(0, shown).forEach((r) => {
-    const tr = document.createElement("tr");
-    // Column keys become classes (lanc-col-*) so the mobile stylesheet can
-    // lay each row out as a compact card instead of a wide scrolling table.
-    [
-      ["linha", `#${r.linha}`],
-      ["data", formatLancamentoData(r.data)],
-      ["loja", r.loja || ""],
-      ["conta", r.conta || ""],
-      ["empresa", r.empresa || ""],
-      ["categoria", r.categoria || ""],
-      ["valor", formatBRL(r.valor)],
-      ["tipo", r.tipo || ""],
-      ["peso", r.peso != null ? formatQuantidade(r.peso) : ""],
-      ["pessoa", r.pessoa || ""],
-      ["observacao", r.observacao || ""],
-    ].forEach(([key, text]) => {
-      const td = document.createElement("td");
-      td.className = `lanc-col-${key}`;
-      if (key === "valor") td.classList.add(r.tipo === "Entrada" ? "valor-entrada" : "valor-saida");
-      td.textContent = text;
-      td.hidden = Boolean(vazias[key]);
-      tr.appendChild(td);
-    });
-    nomesExtra.forEach((nome) => {
-      const td = document.createElement("td");
-      td.className = "lanc-col-extra";
-      td.dataset.nome = nome;
-      td.textContent = valorDeExtra(r, nome);
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "chart-empty";
+    empty.textContent = "Nenhum lançamento encontrado.";
+    container.appendChild(empty);
+    return;
+  }
+
+  filtered.slice(0, shown).forEach((r) => container.appendChild(buildLancamentoCard(r, nomesExtra)));
 }
 
 // A changed filter starts back at the first page.
