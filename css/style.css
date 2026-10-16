@@ -1,17 +1,27 @@
 :root {
-  /* Direction "Finan. Capital" (2026-10-12): the product's real operating
-     company adopted this brand — navy + gold + off-white, Sora throughout —
-     replacing the earlier near-black "Ouro" look. Approved first as a
-     Design-canvas prototype of five screens (login, dashboard, lista,
-     formulário, ajustes) before any app code changed, same "prototype first"
-     pattern as every earlier redesign in this file. Off-white is now the
-     default/only look (no more dark-by-default): --color-bg/--color-surface
-     are the ones every card/page already reads, so repainting them here
-     cascades through the whole app with no other file needing to change.
-     The former dark/"Papel" light toggle (and its topbar button) was
-     removed outright 2026-10-13 — it had been left wired but inert since
-     this rebrand shipped, and the user asked for it gone for good once it
-     was clear a second look wasn't coming back. There is only one look. */
+  /* Direction "Finan." blue (2026-10-15): the company handed over a finished
+     replacement brand package (signed SVG lockups: selo, wordmark, light/
+     dark variants) that drops the gold accent and the "Capital" word from
+     the wordmark — navy + blue + off-white/white now, wordmark is just
+     "Finan." with the period drawn as a small colored square (echoing the
+     selo's own dot), same technique as the mark itself. Supersedes the
+     2026-10-12 "Finan. Capital" (navy/gold) direction below outright, not a
+     refinement of it — see that entry, kept for context. Implemented as a
+     token swap again (navy/off-white tokens are untouched; only the accent
+     family and the wordmark markup changed) — same "cascades with no other
+     file needing to change" reasoning as last time.
+     --color-accent itself was computed directly from the supplied SVGs'
+     fill values (#2563C9 / #7FA9E8), not picked by eye. The contrast
+     profile is the OPPOSITE of gold's: gold (bright) had fine contrast as
+     foreground text on navy but needed a darkened --color-accent-text for
+     light backgrounds; this blue (medium-dark) has fine contrast on the
+     off-white/white surfaces directly (≈5.3:1, computed by hand) but FAILS
+     AA as foreground text on navy (≈2.9:1) — so now it's --color-accent-text
+     that needs the special-casing, on the navy panels (.sidebar/.auth-brand
+     below), using the lighter #7fa9e8 from the "fundo escuro" SVG variant.
+     --color-accent-contrast (the ink used on top of a solid accent-filled
+     button) flips from navy to white for the same reason — white reads far
+     better on this blue than navy does (≈5.7:1 vs. poor). */
   color-scheme: light;
   --color-bg: #faf7f0;
   --color-surface: #ffffff;
@@ -23,23 +33,25 @@
   --color-gridline: #ece9e0;
   --color-baseline: #d9dee6;
 
-  --color-accent: #c99a2e;
-  --color-accent-hover: #b38a28;
-  --color-accent-contrast: #0b1f3a;
-  --color-accent-wash: rgba(201, 154, 46, 0.12);
-  --color-edge: rgba(201, 154, 46, 0.4);
+  --color-accent: #2563c9;
+  --color-accent-hover: #1f54ab;
+  --color-accent-contrast: #ffffff;
+  --color-accent-wash: rgba(37, 99, 201, 0.12);
+  --color-edge: rgba(37, 99, 201, 0.4);
   /* --color-accent itself is a fixed brand color, used as a solid FILL (button
-     backgrounds, active pills) with --color-accent-contrast (navy) ink on
-     top. --color-accent-text is the same gold used as a FOREGROUND (text,
+     backgrounds, active pills) with --color-accent-contrast (white) ink on
+     top. --color-accent-text is the same blue used as a FOREGROUND (text,
      borders, thin strokes, KPI labels) directly on the off-white/white
-     background — the brand guide's own "dourado escuro" value, picked
-     specifically for small gold text on a light surface. */
-  --color-accent-text: #9a7420;
+     background — passes contrast there as-is, so unlike gold's old
+     "dourado escuro" it needs no separate darkened value; .sidebar/
+     .auth-brand still override this token locally (see below) since it's
+     the NAVY surfaces, not the light ones, that need a different shade now. */
+  --color-accent-text: #2563c9;
 
-  /* Danger/success are not part of the brand's own palette (navy/gold only),
+  /* Danger/success are not part of the brand's own palette (navy/blue only),
      but the app needs a third, unambiguous signal for gains vs. losses —
-     ordinary green/red, distinct from the brand gold so a KPI trend is never
-     confused with the brand accent itself. */
+     ordinary green/red, distinct from the brand accent so a KPI trend is
+     never confused with the brand accent itself. */
   --color-success: #1e8e5a;
   --color-success-wash: rgba(30, 142, 90, 0.12);
   --color-danger: #b3261e;
@@ -48,11 +60,11 @@
   --hero-bg: #ffffff;
   --hero-text: #0b1f3a;
   --hero-text-muted: #5b6577;
-  --hero-accent: #c99a2e;
+  --hero-accent: #2563c9;
 
   --shadow-sm: 0 1px 2px rgba(11, 31, 58, 0.05);
   --shadow-md: 0 10px 28px rgba(11, 31, 58, 0.08);
-  --shadow-accent: 0 6px 20px rgba(201, 154, 46, 0.22);
+  --shadow-accent: 0 6px 20px rgba(37, 99, 201, 0.22);
 
   /* Brand guide: one typeface only (Sora), used for everything — body text,
      the brand name/titles, and (replacing the old JetBrains Mono convention)
@@ -157,17 +169,23 @@ html.retomando #login-screen {
 }
 
 .auth-brand {
-  /* Local overrides (2026-10-12, Finan. Capital): the brand panel is a fixed
-     navy identity, not a themed surface (same technique as .sidebar above) —
-     its own --color-text/--color-muted/--color-subtle/--color-accent-text
-     feed every descendant rule (.auth-headline, .auth-subhead, .auth-tag...)
-     through ordinary custom-property inheritance. */
+  /* Local overrides (2026-10-12, updated 2026-10-15 for the blue brand): the
+     brand panel is a fixed navy identity, not a themed surface (same
+     technique as .sidebar above) — its own --color-text/--color-muted/
+     --color-subtle/--color-accent-text feed every descendant rule
+     (.auth-headline, .auth-subhead, .auth-tag...) through ordinary
+     custom-property inheritance. --color-accent-text is a literal
+     #7fa9e8 here, NOT var(--color-accent) — the blue accent fails AA
+     contrast as foreground text on navy (≈2.9:1), unlike the old gold,
+     which had fine contrast on navy and so just reused the same token. The
+     lighter value is the exact one the brand's own "fundo escuro" SVG
+     variant uses for the wordmark dot/accent on a dark background. */
   --color-bg: #0b1f3a;
   --color-text: #ffffff;
   --color-muted: #b9c2d4;
   --color-subtle: #6b7689;
   --color-border: rgba(255, 255, 255, 0.14);
-  --color-accent-text: var(--color-accent);
+  --color-accent-text: #7fa9e8;
   width: 57%;
   min-width: 320px;
   max-width: 820px;
@@ -189,7 +207,7 @@ html.retomando #login-screen {
 .auth-dotgrid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(201, 154, 46, 0.22) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(37, 99, 201, 0.22) 1px, transparent 1px);
   background-size: 28px 28px;
   pointer-events: none;
 }
@@ -210,13 +228,14 @@ html.retomando #login-screen {
 /* Two faint outlined squares, echoing the logo's own rounded-square selo —
    the login screen's whole decorative motif (2026-10-12, Finan. Capital),
    replacing the earlier wireframe-cubes-plus-halftone-sphere art. No fill,
-   no gradient, no shadow, per the brand guide's "não fazer" list. */
+   no gradient, no shadow, per the brand guide's "não fazer" list. Recolored
+   blue 2026-10-15 along with the rest of the accent. */
 .auth-brand-full::before,
 .auth-brand-full::after {
   content: "";
   position: absolute;
   pointer-events: none;
-  border: 1.5px solid rgba(201, 154, 46, 0.22);
+  border: 1.5px solid rgba(37, 99, 201, 0.22);
   border-radius: 72px;
 }
 
@@ -232,12 +251,12 @@ html.retomando #login-screen {
   bottom: -40px;
   width: 300px;
   height: 300px;
-  border-color: rgba(201, 154, 46, 0.14);
+  border-color: rgba(37, 99, 201, 0.14);
   border-radius: 48px;
 }
 
 .art-halftone {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .art-wire {
@@ -245,19 +264,23 @@ html.retomando #login-screen {
 }
 
 .art-accent {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
-/* Finan. Capital brand mark (2026-10-12, js/art.js's buildLogoMark): the
-   square and the "F" are deliberately colored from --color-text/--color-bg,
-   not a fixed pair. On every plain (off-white) surface — the boot screen,
-   the Painel do sistema topbar — --color-text is navy (square) and
-   --color-bg is off-white (F): the "versão principal" from the brand guide.
-   Inside .sidebar and .auth-brand specifically, which locally redeclare
-   those same two tokens for their navy panels (see .sidebar above), the
-   exact same two CSS rules automatically flip to a white square with a navy
-   F — the brand guide's "fundo escuro" variant — with no second mark and no
-   extra per-context rule needed. The dot is always the brand gold. */
+/* Finan. brand mark (2026-10-12, js/art.js's buildLogoMark): the square and
+   the "F" are deliberately colored from --color-text/--color-bg, not a
+   fixed pair. On every plain (off-white) surface — the boot screen, the
+   Painel do sistema topbar — --color-text is navy (square) and --color-bg
+   is off-white (F): the "versão principal" from the brand guide. Inside
+   .sidebar and .auth-brand specifically, which locally redeclare those same
+   two tokens for their navy panels (see .sidebar above), the exact same two
+   CSS rules automatically flip to a white square with a navy F — the brand
+   guide's "fundo escuro" variant — with no second mark and no extra
+   per-context rule needed. The dot is always the full-saturation brand
+   blue (var(--color-accent), not -text) in every one of the supplied SVG
+   variants, dark-square or light-square alike — it's a small decorative
+   chip, not body text, so it doesn't need the navy-surface contrast
+   special-casing --color-accent-text gets elsewhere (2026-10-15). */
 .logo-square {
   fill: var(--color-text);
 }
@@ -275,7 +298,7 @@ html.retomando #login-screen {
   font-size: 0.75rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   margin-bottom: 1.1rem;
 }
 
@@ -300,9 +323,14 @@ html.retomando #login-screen {
   letter-spacing: -0.01em;
 }
 
-/* "Finan." stays --color-text (ink), "Capital" is always the brand gold —
-   same two-color wordmark lockup used throughout the approved prototype. */
-.wordmark-capital {
+/* 2026-10-15: "Capital" is gone from the wordmark lockup entirely — every
+   supplied SVG just reads "Finan.", with the period itself drawn as a
+   small colored square (same technique as the selo's own dot), not a plain
+   typographic mark. This class (renamed from the old .wordmark-capital,
+   which colored the now-removed "Capital" word) colors that one period
+   instead; the text node "Finan" before it stays --color-text (ink/white)
+   via .auth-wordmark/.sidebar-title's own rule. */
+.wordmark-dot {
   color: var(--color-accent-text);
 }
 
@@ -3066,7 +3094,7 @@ td select {
 }
 
 .auth-fineprint a {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: none;
 }
 
@@ -3303,7 +3331,7 @@ td select {
 /* Painel do sistema: its own screen, outside any company */
 .company-picker-sistema {
   border-color: var(--color-edge);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-weight: 600;
 }
 
@@ -3575,7 +3603,7 @@ td select {
   padding: 0.2rem 0;
   border: none;
   background: none;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -3638,17 +3666,19 @@ td select {
    @media print, where it's the ONLY thing visible — everything else in body
    (sidebar, topbar, whichever screen is active) is force-hidden regardless of
    app state, so printing never depends on what the person happened to have
-   open. White paper, not the "Ouro" near-black screen look (would waste ink
-   and read poorly printed) — but still carries the app's own identity: the
-   same fonts, the mono "[ bracket ]" label convention every card/stat uses
-   on screen, and the brand mark, just in a print-safe gold. --relatorio-gold
-   is a literal hex, not var(--color-accent-text), left that way even after
-   the dark/"Papel" theme toggle was removed for good (2026-10-13, there is
-   only one theme now) — it's still the correct print-safe value, just no
-   longer load-bearing against a second theme that no longer exists. */
+   open. White paper, not a dark screen look (would waste ink and read
+   poorly printed) — but still carries the app's own identity: the same
+   fonts, the mono "[ bracket ]" label convention every card/stat uses on
+   screen, and the brand mark, just in a print-safe shade. --relatorio-accent
+   (renamed 2026-10-15 from --relatorio-gold when the brand accent itself
+   became blue; was #8a6410, now the brand blue #2563c9, which already
+   passes contrast on white paper as-is — no separate darkening needed, see
+   the :root comment) is a literal hex, not var(--color-accent-text), kept
+   independent so printing stays correct regardless of what the on-screen
+   token happens to resolve to. */
 .relatorio-impressao {
   display: none;
-  --relatorio-gold: #8a6410;
+  --relatorio-accent: #2563c9;
 }
 
 .relatorio-impressao header {
@@ -3657,7 +3687,7 @@ td select {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
-  border-bottom: 2px solid var(--relatorio-gold);
+  border-bottom: 2px solid var(--relatorio-accent);
   padding-bottom: 0.75rem;
 }
 
@@ -3673,18 +3703,18 @@ td select {
   height: 26px;
 }
 
-/* buildLogoMark()'s strokes are colored via .art-accent -> var(--color-accent),
-   which stays the same bright dark-mode gold in every on-screen theme (see
-   CLAUDE.md) and fails contrast on white paper. Override just here. */
+/* buildLogoMark()'s strokes are colored via .art-accent -> var(--color-accent-text),
+   which can differ from this print-safe value depending on on-screen
+   context. Override just here. */
 .relatorio-impressao .art-accent {
-  color: var(--relatorio-gold);
+  color: var(--relatorio-accent);
 }
 
 .relatorio-marca-texto {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.05rem;
-  color: var(--relatorio-gold);
+  color: var(--relatorio-accent);
 }
 
 .relatorio-impressao h1 {
@@ -3719,8 +3749,8 @@ td select {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--relatorio-gold);
-  border-bottom: 1px solid var(--relatorio-gold);
+  color: var(--relatorio-accent);
+  border-bottom: 1px solid var(--relatorio-accent);
   padding-bottom: 0.25rem;
   margin: 0 0 0.6rem;
 }
@@ -3767,8 +3797,8 @@ td select {
 }
 
 .relatorio-impressao th {
-  background: rgba(138, 100, 16, 0.12);
-  color: var(--relatorio-gold);
+  background: rgba(37, 99, 201, 0.12);
+  color: var(--relatorio-accent);
   font-family: var(--font-mono);
   font-size: 0.7rem;
   text-transform: uppercase;

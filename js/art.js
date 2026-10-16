@@ -107,7 +107,7 @@ function buildBrandArt() {
   ]);
 }
 
-// Finan. Capital brand mark (2026-10-12, redrawn 2026-10-12 to fix the F's
+// "Finan." brand mark (2026-10-12, redrawn 2026-10-12 to fix the F's
 // alignment): a rounded square with "F" and a small square dot, replacing
 // the earlier two-cube wireframe. The F and the dot are the EXACT path data
 // from the real brand SVG the user supplied (124x124 viewBox, rx 27) — a
@@ -117,7 +117,10 @@ function buildBrandArt() {
 // whatever `size` is requested. Colored via CSS (.logo-square/.logo-f/
 // .logo-dot in css/style.css), not fixed here, so the same markup reads
 // correctly both on a plain light surface and inside the navy sidebar/auth
-// panel.
+// panel. Geometry is untouched by the 2026-10-15 blue-accent rebrand — the
+// new brand SVGs use these exact same F/dot path coordinates, only the
+// dot's CSS fill color (and the wordmark's "Capital" suffix, handled in
+// js/segmentos.js) changed.
 function buildLogoMark(size) {
   const scale = size / 124;
   const svg = svgNode("svg", {
@@ -145,9 +148,9 @@ function buildLogoMark(size) {
 
 // Per-segment marks (cat/dog, hex nut, lidded cylinder...) and per-segment
 // brand names (FinanGold, FinanPet...) were removed 2026-10-12, on request:
-// the app now always shows the one real Finan. Capital identity, everywhere,
-// regardless of a company's segment. Puts the Finan. Capital mark in the
-// sidebar logo slot — segment-independent on purpose.
+// the app now always shows the one real "Finan." identity, everywhere,
+// regardless of a company's segment. Puts the Finan. mark in the sidebar
+// logo slot — segment-independent on purpose.
 function trocarLogoSegmento() {
   const slot = document.getElementById("sidebar-logo");
   if (!slot) return;
@@ -157,7 +160,7 @@ function trocarLogoSegmento() {
 
 // Fills every static slot in the page: [data-art="brand|logo|logo-lg"].
 // "brand" (the login screen's big centerpiece) is deliberately left empty
-// since 2026-10-12 — the Finan. Capital look replaces the old wireframe-cube-
+// since 2026-10-12 — the "Finan." look replaces the old wireframe-cube-
 // plus-halftone-sphere art with the two faint outlined squares drawn in CSS
 // (.auth-brand::before/::after), not JS-built SVG; buildBrandArt() is kept,
 // unused, in case a future design wants SVG art there again.

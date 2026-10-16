@@ -1,4 +1,4 @@
-// Business segments. The product is "Finan. Capital" — one single identity,
+// Business segments. The product is "Finan." — one single identity,
 // shown the same way to every company regardless of segment (per-segment
 // brand names like "FinanGold"/"FinanPet" were removed 2026-10-12, on
 // request). Each company still belongs to one segment, which now only picks
@@ -84,17 +84,20 @@ function formatQuantidade(valor) {
   return `${valor.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${vocab("qtdUnidade")}`;
 }
 
-// The sidebar always shows the one real brand, "Finan. Capital" — "Finan."
-// ink-colored, "Capital" gold (.wordmark-capital, the same class the login
-// wordmark uses), via createElement/textContent, not innerHTML. Segment-
-// specific brand names (FinanGold, FinanPet...) were removed 2026-10-12.
+// The sidebar always shows the one real brand, "Finan." — "Finan" ink-
+// colored, the period itself drawn as a small colored square via
+// .wordmark-dot (the same class the login wordmark uses, renamed
+// 2026-10-15 from .wordmark-capital when the "Capital" word was dropped
+// from the wordmark entirely, per the new brand SVGs), via
+// createElement/textContent, not innerHTML. Segment-specific brand names
+// (FinanGold, FinanPet...) were removed 2026-10-12.
 function renderMarcaTitulo(el) {
   el.textContent = "";
-  el.appendChild(document.createTextNode("Finan. "));
-  const capital = document.createElement("span");
-  capital.className = "wordmark-capital";
-  capital.textContent = "Capital";
-  el.appendChild(capital);
+  el.appendChild(document.createTextNode("Finan"));
+  const dot = document.createElement("span");
+  dot.className = "wordmark-dot";
+  dot.textContent = ".";
+  el.appendChild(dot);
 }
 
 // Switches the whole interface to a segment: vocabulary (every element
