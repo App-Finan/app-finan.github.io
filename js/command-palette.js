@@ -4,8 +4,6 @@ const COMMANDS = [
   { view: "lancamento-form", label: "Novo lançamento", group: "Fluxo de Caixa" },
   { view: "estoque-lista", label: "Consultar estoque", group: "Estoque" },
   { view: "estoque-form", labelKey: "novoItem", label: "Novo item", group: "Estoque" },
-  { view: "fornecedores-lista", label: "Consultar fornecedores", group: "Compras" },
-  { view: "fornecedores-form", label: "Novo fornecedor", group: "Compras" },
   { view: "contas-pagar-lista", label: "Contas a Pagar", group: "Financeiro" },
   { view: "contas-pagar-form", label: "Nova conta a pagar", group: "Financeiro" },
   { view: "contas-receber-lista", label: "Contas a Receber", group: "Financeiro" },
