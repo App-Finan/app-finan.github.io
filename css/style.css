@@ -1883,6 +1883,19 @@ td select {
   color: var(--color-muted);
 }
 
+/* Conciliação bancária (2026-10-18): mesmo padrão de badge do .estoque-status
+   acima, só com nomes próprios do domínio — não "em-estoque"/"com-vendedor",
+   que não fariam sentido para uma linha de extrato. */
+.extrato-status-conciliado {
+  background: color-mix(in srgb, var(--good-text) 15%, transparent);
+  color: var(--good-text);
+}
+
+.extrato-status-pendente {
+  background: color-mix(in srgb, var(--series-4) 20%, transparent);
+  color: var(--series-4);
+}
+
 .estoque-actions-host {
   margin-top: 0.5rem;
 }

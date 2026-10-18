@@ -182,6 +182,14 @@ function deserializeLancamentos(cached) {
   return cached.map((r) => ({ ...r, data: r.data ? new Date(r.data) : null }));
 }
 
+function serializeExtrato(itens) {
+  return itens.map((i) => ({ ...i, data: i.data ? i.data.toISOString() : null }));
+}
+
+function deserializeExtrato(cached) {
+  return cached.map((i) => ({ ...i, data: i.data ? new Date(i.data) : null }));
+}
+
 function serializeEstoque(items) {
   return items.map((i) => ({
     ...i,

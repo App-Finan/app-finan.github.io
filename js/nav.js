@@ -10,6 +10,7 @@ const VIEW_TITLES = {
   "contas-receber-lista": "Contas a Receber",
   "contas-receber-form": "Nova conta a receber",
   relatorio: "Relatório",
+  "extrato-bancario": "Extrato Bancário",
   impostos: "Impostos",
   ajustes: "Ajustes",
 };
@@ -32,6 +33,7 @@ const VIEW_EYEBROWS = {
   "contas-receber-lista": "Financeiro",
   "contas-receber-form": "Financeiro",
   relatorio: "Financeiro",
+  "extrato-bancario": "Financeiro",
   impostos: "Financeiro",
   ajustes: "Ajustes",
 };
@@ -46,6 +48,7 @@ const VIEW_GROUPS = {
   "contas-receber-lista": "financeiro",
   "contas-receber-form": "financeiro",
   relatorio: "financeiro",
+  "extrato-bancario": "financeiro",
   impostos: "financeiro",
 };
 

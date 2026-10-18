@@ -236,6 +236,7 @@ async function resolveProfileAndEnter(tenant, token, email) {
       await ensureFornecedoresSheet(token);
       await ensureContasSheet("pagar", token);
       await ensureContasSheet("receber", token);
+      await ensureExtratoSheet(token);
       return fetchUsuario(email, token);
     });
     if (usuario) {
@@ -290,6 +291,7 @@ async function refreshAllData() {
     populateLookupSelects(lookups);
     populateEstoqueFormSelects(lookups);
     estoqueLookups = lookups; // keep the estoque list's cached lookups (custody/sold pickers) in sync
+    extratoLookups = lookups; // same reasoning: the "Criar lançamento" inline panel needs fresh options too
   } catch (err) {
     console.error(err);
     errors.push(`Listas de apoio: ${err.message}`);
@@ -321,6 +323,13 @@ async function refreshAllData() {
   } catch (err) {
     console.error(err);
     errors.push(`Contas a Receber: ${err.message}`);
+  }
+
+  try {
+    await refreshExtrato();
+  } catch (err) {
+    console.error(err);
+    errors.push(`Extrato Bancário: ${err.message}`);
   }
 
   renderContasResumoDashboard(allContas.pagar, allContas.receber);
@@ -538,13 +547,14 @@ async function startApp(token, nome, perfil, linha) {
     console.error(err);
   }
 
-  const [lancResult, lookupsResult, estoqueResult, fornecedoresResult, contasPagarResult, contasReceberResult] = await Promise.allSettled([
+  const [lancResult, lookupsResult, estoqueResult, fornecedoresResult, contasPagarResult, contasReceberResult, extratoResult] = await Promise.allSettled([
     fetchWithOfflineFallback(() => fetchLancamentos(token), "lancamentos", serializeLancamentos, deserializeLancamentos),
     fetchWithOfflineFallback(() => fetchAllLookups(token), "lookups", null, null),
     fetchWithOfflineFallback(() => fetchEstoque(token), "estoque", serializeEstoque, deserializeEstoque),
     fetchWithOfflineFallback(() => fetchFornecedores(token), "fornecedores", null, null),
     fetchWithOfflineFallback(() => fetchContas("pagar", token), "contas-pagar", null, null),
     fetchWithOfflineFallback(() => fetchContas("receber", token), "contas-receber", null, null),
+    fetchWithOfflineFallback(() => fetchExtrato(token), "extrato", serializeExtrato, deserializeExtrato),
   ]);
 
   const errors = [];
@@ -604,6 +614,14 @@ async function startApp(token, nome, perfil, linha) {
   } else if (contasReceberResult.status === "rejected") {
     console.error(contasReceberResult.reason);
     errors.push(`Contas a Receber: ${contasReceberResult.reason.message}`);
+  }
+
+  if (extratoResult.status === "fulfilled" && lookupsResult.status === "fulfilled") {
+    initExtratoUi(extratoResult.value.data, lookupsResult.value.data);
+    if (extratoResult.value.fromCache) anyFromCache = true;
+  } else if (extratoResult.status === "rejected") {
+    console.error(extratoResult.reason);
+    errors.push(`Extrato Bancário: ${extratoResult.reason.message}`);
   }
 
   // Dashboard's own small "Contas a Pagar"/"Contas a Receber" numbers — shown

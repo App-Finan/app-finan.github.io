@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-17-calculadora-impostos";
+const GATEWAY_VERSION = "2026-10-18-conciliacao-bancaria";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -67,6 +67,18 @@ const CONTAS_HEADERS = {
   [CONTAS_PAGAR_TAB]: ["Descrição", "Fornecedor", "Categoria", "Valor", "Vencimento", "Status", "Pago em", "Recorrente", "Observação", "Avisado em"],
   [CONTAS_RECEBER_TAB]: ["Descrição", "Cliente", "Categoria", "Valor", "Vencimento", "Status", "Recebido em", "Recorrente", "Observação", "Avisado em"],
 };
+// Conciliação bancária (2026-10-18) — importação de extrato OFX/CSV, ver
+// js/extrato.js. Cada linha é uma transação real do banco (não um lançamento
+// do app): Valor já vem com o sinal do próprio extrato, Tipo é só uma
+// conveniência de leitura (igual Status em Contas a Pagar), Conciliado/
+// "Lançamento vinculado" marcam se essa linha já foi pareada com um
+// Lançamento real, e "Origem ID" (o FITID do OFX, ou um hash para CSV) evita
+// duplicar uma transação ao reimportar um período que já foi importado antes.
+// Mesmo split de acesso que Fornecedores/Contas (não FISCAL_TAB/IMPOSTOS_TAB):
+// leitura geral, escrita Editor+Master via READ_TABS/WRITE_TABS — não guarda
+// nenhum segredo, é só mais um dado financeiro da empresa.
+const EXTRATO_TAB = "Extrato Bancário";
+const EXTRATO_HEADERS = ["Data", "Conta", "Descrição", "Valor", "Tipo", "Conciliado", "Lançamento vinculado", "Origem ID", "Importado em"];
 // "Configuração Fiscal" tab (2026-10-16): where a company's Master stores the
 // NF-e provider credentials (provedor, ambiente, CNPJ emissor, token/chave de
 // API) for when real automated NF emission is built — this ONLY stores the
@@ -109,7 +121,7 @@ const IMPOSTOS_HEADERS = [
 // access rule (FISCAL_TAB: Master-only for a credential; IMPOSTOS_TAB:
 // Editor+Master for both reads AND writes, which the generic READ_TABS path
 // can't express since it allows any role to read).
-const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, FISCAL_TAB, IMPOSTOS_TAB];
+const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, EXTRATO_TAB, FISCAL_TAB, IMPOSTOS_TAB];
 const LOOKUP_TABS = ["Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
 const MAX_COMPANIES = 200;
 const REQUESTS_TAB = "Solicitações";
@@ -161,6 +173,7 @@ function companyTemplate_(segmento) {
     { name: FORNECEDORES_TAB, headers: FORNECEDORES_HEADERS, seeds: () => [] },
     { name: CONTAS_PAGAR_TAB, headers: CONTAS_HEADERS[CONTAS_PAGAR_TAB], seeds: () => [] },
     { name: CONTAS_RECEBER_TAB, headers: CONTAS_HEADERS[CONTAS_RECEBER_TAB], seeds: () => [] },
+    { name: EXTRATO_TAB, headers: EXTRATO_HEADERS, seeds: () => [] },
     { name: "Lojas", headers: LOOKUP_HEADERS, seeds: () => [seedRow_(1, "Loja principal")] },
     { name: "Contas", headers: LOOKUP_HEADERS, seeds: () => [seedRow_(1, "Caixa"), seedRow_(2, "Banco")] },
     { name: "Empresas", headers: LOOKUP_HEADERS, seeds: (empresa) => [seedRow_(1, empresa)] },
@@ -172,8 +185,8 @@ function companyTemplate_(segmento) {
     { name: "Usuários", headers: ["Email", "Nome", "Perfil"], seeds: () => [] },
   ];
 }
-const READ_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, "Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
-const WRITE_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB]; // plus the company's own ledger tab (sheetName)
+const READ_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, EXTRATO_TAB, "Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
+const WRITE_TABS = ["Estoque", FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, EXTRATO_TAB]; // plus the company's own ledger tab (sheetName)
 const ROLE_VISUALIZADOR = "Visualizador";
 const ROLE_EDITOR = "Editor";
 const ROLE_MASTER = "Master";

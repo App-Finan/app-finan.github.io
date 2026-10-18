@@ -11,6 +11,7 @@ const COMMANDS = [
   { view: "contas-receber-lista", label: "Contas a Receber", group: "Financeiro" },
   { view: "contas-receber-form", label: "Nova conta a receber", group: "Financeiro" },
   { view: "relatorio", label: "Relatório", group: "Financeiro" },
+  { view: "extrato-bancario", label: "Extrato Bancário", group: "Financeiro" },
   { view: "impostos", label: "Impostos", group: "Financeiro" },
   { view: "ajustes", label: "Ajustes", group: "Navegação" },
 ];

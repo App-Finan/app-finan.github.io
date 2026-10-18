@@ -361,6 +361,7 @@
         <div class="nav-submenu" id="submenu-financeiro" hidden>
           <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-lista">Contas a Pagar</button>
           <button type="button" class="nav-item nav-subitem" data-view="contas-receber-lista">Contas a Receber</button>
+          <button type="button" class="nav-item nav-subitem" data-view="extrato-bancario">Extrato Bancário</button>
           <button type="button" class="nav-item nav-subitem" data-view="impostos" id="nav-impostos">Impostos</button>
         </div>
       </div>
@@ -860,6 +861,54 @@
         </form>
       </section>
 
+      <section class="view-section" data-view="extrato-bancario" id="view-extrato-bancario" hidden>
+        <section class="card">
+          <h2>Importar extrato</h2>
+          <p class="field-hint">Baixe o extrato do seu banco em formato OFX (recomendado) ou CSV e importe aqui — nenhuma transação é duplicada ao reimportar um período que se repete.</p>
+          <form id="extrato-import-form" class="lancamento-form">
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="extrato-import-conta">Conta</label>
+                <select id="extrato-import-conta"></select>
+              </div>
+              <div class="form-field">
+                <label for="extrato-import-arquivo">Arquivo (.ofx ou .csv)</label>
+                <input type="file" id="extrato-import-arquivo" accept=".ofx,.csv,text/plain">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" id="btn-importar-extrato">Importar</button>
+              <span id="extrato-import-status" class="status-message"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>Extrato por mês</h2>
+          <div class="filters-row">
+            <div class="filter-group">
+              <label for="extrato-filtro-mes">Mês</label>
+              <input type="month" id="extrato-filtro-mes">
+            </div>
+            <div class="filter-group">
+              <label for="extrato-filtro-conta">Conta</label>
+              <select id="extrato-filtro-conta"></select>
+            </div>
+            <div class="filter-group">
+              <label for="extrato-filtro-status">Status</label>
+              <select id="extrato-filtro-status">
+                <option value="">Todos</option>
+                <option value="pendente">Pendentes</option>
+                <option value="conciliado">Conciliados</option>
+              </select>
+            </div>
+          </div>
+          <div class="contas-kpi-row" id="extrato-kpis"></div>
+          <p id="extrato-lista-count" class="field-hint"></p>
+          <div id="extrato-lista-container" class="estoque-list"></div>
+        </section>
+      </section>
+
       <section class="view-section" data-view="relatorio" id="view-relatorio" hidden>
         <section class="filters-row card">
           <div class="filter-group">
@@ -1326,6 +1375,8 @@
 <script src="js/fornecedores-ui.js"></script>
 <script src="js/contas.js"></script>
 <script src="js/contas-ui.js"></script>
+<script src="js/extrato.js"></script>
+<script src="js/extrato-ui.js"></script>
 <script src="js/relatorio.js"></script>
 <script src="js/relatorio-pdf.js"></script>
 <script src="js/export.js"></script>
