@@ -10,6 +10,7 @@ const VIEW_TITLES = {
   "contas-receber-lista": "Contas a Receber",
   "contas-receber-form": "Nova conta a receber",
   relatorio: "Relatório",
+  impostos: "Impostos",
   ajustes: "Ajustes",
 };
 
@@ -31,6 +32,7 @@ const VIEW_EYEBROWS = {
   "contas-receber-lista": "Financeiro",
   "contas-receber-form": "Financeiro",
   relatorio: "Financeiro",
+  impostos: "Financeiro",
   ajustes: "Ajustes",
 };
 
@@ -44,6 +46,7 @@ const VIEW_GROUPS = {
   "contas-receber-lista": "financeiro",
   "contas-receber-form": "financeiro",
   relatorio: "financeiro",
+  impostos: "financeiro",
 };
 
 const SIDEBAR_COLLAPSED_KEY = "financegold_sidebar_collapsed";
@@ -170,6 +173,12 @@ function applyRoleVisibility(role) {
     const btn = document.getElementById(id);
     if (btn) btn.hidden = !editable;
   });
+  // Impostos shows revenue/tax data the user asked to keep away from
+  // Visualizador entirely (not just its "Novo ..." actions) — the nav-subitem
+  // itself is hidden, same UI-convenience-not-security-boundary caveat as
+  // above (the real boundary is Editor+Master-only in Code.gs, see IMPOSTOS_TAB).
+  const navImpostos = document.getElementById("nav-impostos");
+  if (navImpostos) navImpostos.hidden = !editable;
 }
 
 let navigationInitialized = false;

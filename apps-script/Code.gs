@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-16-configuracao-fiscal";
+const GATEWAY_VERSION = "2026-10-17-calculadora-impostos";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -78,15 +78,38 @@ const CONTAS_HEADERS = {
 // there is only ever one fiscal configuration per company.
 const FISCAL_TAB = "Configuração Fiscal";
 const FISCAL_HEADERS = ["Provedor", "Ambiente", "CNPJ Emissor", "Token/Chave de API", "Atualizado em"];
+// "Configuração Tributária" tab (2026-10-17): the company's tax structure —
+// regime (Simples Nacional/Lucro Presumido/Lucro Real/MEI), atividade, Anexo
+// do Simples, UF/município, alíquotas de ICMS/ISS informadas pelo usuário, a
+// partilha do DAS por imposto (Simples) and the MEI fixed amounts — used by
+// the client-side (js/impostos.js) approximate tax calculator. Unlike
+// FISCAL_TAB above, this one is readable/writable by Editor+Master (not
+// Master-only): it holds business facts, not a credential. Deliberately NOT
+// pre-seeded in companyTemplate_ (lazy-created on first use, like
+// Configuração), and NOT in READ_TABS/WRITE_TABS — special-cased in
+// actionGetValues_/actionUpdateValues_ instead, because the generic read path
+// would let a Visualizador read it too (same reasoning as USUARIOS_TAB, just
+// with a lower bar: Editor+Master, not Master-only). Always exactly one data
+// row (A2:Q2) — there is only ever one tax configuration per company; the
+// month-to-month numbers (faturamento, lucro apurado) are typed fresh into
+// the calculator each time and are never saved (confirmed with the user).
+const IMPOSTOS_TAB = "Configuração Tributária";
+const IMPOSTOS_HEADERS = [
+  "Regime", "Atividade", "Anexo Simples", "UF", "Município", "Alíquota ICMS (%)", "Alíquota ISS (%)",
+  "Partilha IRPJ (%)", "Partilha CSLL (%)", "Partilha COFINS (%)", "Partilha PIS (%)", "Partilha CPP (%)", "Partilha ICMS/ISS (%)",
+  "MEI INSS fixo (R$)", "MEI ICMS fixo (R$)", "MEI ISS fixo (R$)", "Atualizado em",
+];
 // Tab CREATION is Master-only (actionAddTab_); writing ROWS in an existing one
 // is Editor+Master (WRITE_TABS) — same split as Fornecedores, same reasoning
 // as Configuração: creating a tab is a structural change to the spreadsheet.
-// FISCAL_TAB is the one exception: it is listed here too (so actionAddTab_
-// lets a Master create it) but deliberately left OUT of WRITE_TABS below —
-// its row writes are special-cased Master-only in actionUpdateValues_, the
-// same way Configuração's are, because this tab holds an API credential, not
-// ordinary business data an Editor should see or touch.
-const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, FISCAL_TAB];
+// FISCAL_TAB and IMPOSTOS_TAB are both exceptions: they are listed here too
+// (so actionAddTab_ lets a Master create them) but deliberately left OUT of
+// WRITE_TABS below — their row writes are special-cased in
+// actionUpdateValues_ instead, because each needs a different, non-generic
+// access rule (FISCAL_TAB: Master-only for a credential; IMPOSTOS_TAB:
+// Editor+Master for both reads AND writes, which the generic READ_TABS path
+// can't express since it allows any role to read).
+const ERP_MASTER_ONLY_TABS = [FORNECEDORES_TAB, CONTAS_PAGAR_TAB, CONTAS_RECEBER_TAB, FISCAL_TAB, IMPOSTOS_TAB];
 const LOOKUP_TABS = ["Lojas", "Contas", "Empresas", "Categoria", "Pessoa", "Produto", "Tipo de Produto", "Marcas"];
 const MAX_COMPANIES = 200;
 const REQUESTS_TAB = "Solicitações";
@@ -604,6 +627,7 @@ function titlesFor_(deps, access, spreadsheet, spreadsheetId) {
   return all.filter(
     (t) =>
       t === USUARIOS_TAB || // its existence is not a secret (the app checks it at every sign-in); its CONTENT stays Master-only
+      t === IMPOSTOS_TAB || // same idea: existence visible to all, content Editor+Master-only (see actionGetValues_)
       READ_TABS.indexOf(t) !== -1 ||
       t === spreadsheet.sheetName ||
       t === CONFIG_TAB ||
@@ -1009,6 +1033,11 @@ function actionGetValues_(deps, access, spreadsheet, body) {
   if (parsed.tab === USUARIOS_TAB) {
     // The full user list is admin data (the app reads the caller's own row via "me").
     if (access.perfil !== ROLE_MASTER && !access.bootstrapOk) throw denied_();
+  } else if (parsed.tab === IMPOSTOS_TAB) {
+    // Tax/revenue structure: Editor+Master only, never Visualizador — the
+    // generic "readable" OR-chain below allows ANY role, which is why this
+    // needs its own branch instead of just joining READ_TABS.
+    if (access.perfil !== ROLE_EDITOR && access.perfil !== ROLE_MASTER) throw denied_();
   } else {
     if (!access.perfil) throw denied_();
     const cfg = loadConfigTabs_(deps, body.spreadsheetId);
@@ -1052,6 +1081,8 @@ function actionUpdateValues_(deps, email, access, spreadsheet, body) {
     if (access.perfil !== ROLE_MASTER || !validConfigRow_(parsed, row)) throw denied_();
   } else if (parsed.tab === FISCAL_TAB) {
     if (access.perfil !== ROLE_MASTER || !validFiscalRow_(parsed, row)) throw denied_();
+  } else if (parsed.tab === IMPOSTOS_TAB) {
+    if ((access.perfil !== ROLE_EDITOR && access.perfil !== ROLE_MASTER) || !validImpostosRow_(parsed, row)) throw denied_();
   } else {
     const cfg = loadConfigTabs_(deps, body.spreadsheetId);
     const isLookup = LOOKUP_TABS.indexOf(parsed.tab) !== -1 || cfg.listas.indexOf(parsed.tab) !== -1;
@@ -1103,6 +1134,17 @@ function validFiscalRow_(parsed, row) {
   if (parsed.cells !== "A1:E1" && parsed.cells !== "A2:E2") return false;
   if (row.length !== 5) return false;
   return row.every((v) => typeof v === "string" && v.length <= 500);
+}
+
+// Configuração Tributária: always exactly 17 cells, either the header row
+// (A1:Q1) or the one data row (A2:Q2) — same single-row shape as
+// validFiscalRow_ above. The real boundary is the Editor-or-Master check
+// right before this call; this is only basic sanity, not a validation of
+// whether the regime/Anexo/percentuais actually make sense together.
+function validImpostosRow_(parsed, row) {
+  if (parsed.cells !== "A1:Q1" && parsed.cells !== "A2:Q2") return false;
+  if (row.length !== 17) return false;
+  return row.every((v) => typeof v === "string" && v.length <= 200);
 }
 
 // Usuários writes: a Master may write anywhere on the tab; the very first
