@@ -655,10 +655,6 @@ async function startApp(token, nome, perfil, linha) {
   }
   if (isMaster(perfil)) initConectar();
   if (isMaster(perfil)) initFiscalConfig();
-  // Impostos is Editor+Master (not Master-only, unlike Configuração Fiscal
-  // above) — the user wants the business owner AND authorized Editores to
-  // see revenue/tax data, never Visualizador.
-  if (canEdit(perfil)) initImpostos();
 
   if (isMaster(perfil)) {
     try {

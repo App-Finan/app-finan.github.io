@@ -362,7 +362,6 @@
           <button type="button" class="nav-item nav-subitem" data-view="contas-pagar-lista">Contas a Pagar</button>
           <button type="button" class="nav-item nav-subitem" data-view="contas-receber-lista">Contas a Receber</button>
           <button type="button" class="nav-item nav-subitem" data-view="extrato-bancario">Extrato Bancário</button>
-          <button type="button" class="nav-item nav-subitem" data-view="impostos" id="nav-impostos">Impostos</button>
         </div>
       </div>
       <button type="button" class="nav-item" data-view="fornecedores-lista">Compras</button>
@@ -935,117 +934,6 @@
         </div>
       </section>
 
-      <section class="view-section" data-view="impostos" id="view-impostos" hidden>
-        <section class="card">
-          <h2>Configuração tributária</h2>
-          <p class="field-hint">Dados da estrutura tributária da empresa, usados pela calculadora abaixo. Isto é uma ferramenta de apoio — todo resultado é <strong>aproximado</strong>; confirme com o contador antes de qualquer decisão real.</p>
-          <form id="impostos-config-form" class="lancamento-form">
-            <div class="form-grid">
-              <div class="form-field">
-                <label for="impostos-regime">Regime tributário</label>
-                <select id="impostos-regime">
-                  <option value="Simples Nacional">Simples Nacional</option>
-                  <option value="Lucro Presumido">Lucro Presumido</option>
-                  <option value="Lucro Real">Lucro Real</option>
-                  <option value="MEI">MEI</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label for="impostos-atividade">Atividade</label>
-                <select id="impostos-atividade">
-                  <option value="Comércio">Comércio</option>
-                  <option value="Indústria">Indústria</option>
-                  <option value="Serviço">Serviço</option>
-                  <option value="Comércio e Serviço">Comércio e Serviço</option>
-                </select>
-              </div>
-              <div class="form-field" id="impostos-anexo-campo">
-                <label for="impostos-anexo">Anexo do Simples Nacional</label>
-                <select id="impostos-anexo">
-                  <option value="I">Anexo I — Comércio</option>
-                  <option value="II">Anexo II — Indústria</option>
-                  <option value="III">Anexo III — Serviços (geral)</option>
-                  <option value="IV">Anexo IV — Serviços (construção, advocacia...)</option>
-                  <option value="V">Anexo V — Serviços profissionais</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label for="impostos-uf">Estado (UF)</label>
-                <input type="text" id="impostos-uf" maxlength="2" placeholder="RJ">
-              </div>
-              <div class="form-field">
-                <label for="impostos-municipio">Município</label>
-                <input type="text" id="impostos-municipio" maxlength="80">
-              </div>
-              <div class="form-field" id="impostos-icms-campo">
-                <label for="impostos-aliquota-icms">Alíquota de ICMS (%)</label>
-                <input type="number" id="impostos-aliquota-icms" step="0.01" min="0" max="100">
-              </div>
-              <div class="form-field" id="impostos-iss-campo">
-                <label for="impostos-aliquota-iss">Alíquota de ISS (%)</label>
-                <input type="number" id="impostos-aliquota-iss" step="0.01" min="0" max="100">
-              </div>
-            </div>
-
-            <p class="field-hint" id="impostos-partilha-hint">No Simples Nacional, o DAS é um valor único que já reúne vários impostos — essa divisão (partilha) varia por Anexo e por faixa de faturamento, e por isso não vem pronta aqui. Para ver o detalhamento abaixo, informe o percentual de cada imposto dentro do DAS, conforme a tabela oficial do seu Anexo (Portal do Simples Nacional).</p>
-            <div class="form-grid" id="impostos-partilha-grid">
-              <div class="form-field"><label for="impostos-partilha-irpj">IRPJ (%)</label><input type="number" id="impostos-partilha-irpj" step="0.01" min="0" max="100"></div>
-              <div class="form-field"><label for="impostos-partilha-csll">CSLL (%)</label><input type="number" id="impostos-partilha-csll" step="0.01" min="0" max="100"></div>
-              <div class="form-field"><label for="impostos-partilha-cofins">COFINS (%)</label><input type="number" id="impostos-partilha-cofins" step="0.01" min="0" max="100"></div>
-              <div class="form-field"><label for="impostos-partilha-pis">PIS (%)</label><input type="number" id="impostos-partilha-pis" step="0.01" min="0" max="100"></div>
-              <div class="form-field"><label for="impostos-partilha-cpp">CPP (%)</label><input type="number" id="impostos-partilha-cpp" step="0.01" min="0" max="100"></div>
-              <div class="form-field"><label for="impostos-partilha-icmsiss">ICMS/ISS (%)</label><input type="number" id="impostos-partilha-icmsiss" step="0.01" min="0" max="100"></div>
-            </div>
-
-            <p class="field-hint" id="impostos-mei-hint">Valores fixos mensais do DAS-MEI (pré-preenchidos com a referência de 2026 — confirme no Portal do Simples Nacional, pois mudam todo ano junto com o salário mínimo).</p>
-            <div class="form-grid" id="impostos-mei-grid">
-              <div class="form-field"><label for="impostos-mei-inss">INSS fixo (R$)</label><input type="number" id="impostos-mei-inss" step="0.01" min="0"></div>
-              <div class="form-field" id="impostos-mei-icms-campo"><label for="impostos-mei-icms">ICMS fixo (R$)</label><input type="number" id="impostos-mei-icms" step="0.01" min="0"></div>
-              <div class="form-field" id="impostos-mei-iss-campo"><label for="impostos-mei-iss">ISS fixo (R$)</label><input type="number" id="impostos-mei-iss" step="0.01" min="0"></div>
-            </div>
-
-            <div class="form-actions">
-              <button type="submit">Salvar configuração</button>
-              <span id="impostos-config-status" class="status-message"></span>
-            </div>
-          </form>
-        </section>
-
-        <section class="card">
-          <h2>Calculadora do mês</h2>
-          <p class="field-hint">Os valores abaixo não ficam salvos — é uma conta "do momento", pensada para refazer sempre que quiser.</p>
-          <form id="impostos-calc-form" class="lancamento-form">
-            <div class="form-grid">
-              <div class="form-field">
-                <label for="impostos-calc-faturamento">Faturamento do mês (R$)</label>
-                <input type="number" id="impostos-calc-faturamento" step="0.01" min="0" required>
-              </div>
-              <div class="form-field" id="impostos-calc-rbt12-campo">
-                <label for="impostos-calc-rbt12">Faturamento dos últimos 12 meses — RBT12 (R$)</label>
-                <input type="number" id="impostos-calc-rbt12" step="0.01" min="0" placeholder="Deixe em branco para estimar como 12× o faturamento do mês">
-              </div>
-              <div class="form-field" id="impostos-calc-lucro-campo">
-                <label for="impostos-calc-lucro">Lucro apurado no mês (R$)</label>
-                <input type="number" id="impostos-calc-lucro" step="0.01" min="0">
-              </div>
-            </div>
-            <div class="form-actions">
-              <button type="submit">Calcular</button>
-            </div>
-          </form>
-          <div id="impostos-resultado" hidden>
-            <p class="field-hint status-erro">Estimativa aproximada, sem validade fiscal — confirme com o contador antes de qualquer decisão.</p>
-            <div class="contas-kpi-row" id="impostos-resultado-kpis"></div>
-            <div class="table-wrapper">
-              <table id="impostos-resultado-tabela">
-                <thead><tr><th>Imposto</th><th>Valor estimado</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      </section>
-
       <section class="view-section" data-view="ajustes" id="view-ajustes" hidden>
         <section class="card">
           <h2>Minha conta</h2>
@@ -1357,7 +1245,6 @@
 <script src="js/usuarios-admin.js"></script>
 <script src="js/listas-admin.js"></script>
 <script src="js/fiscal.js"></script>
-<script src="js/impostos.js"></script>
 <script src="js/modelo.js"></script>
 <script src="js/conectar.js"></script>
 <script src="js/sistema.js"></script>
