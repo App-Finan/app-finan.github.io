@@ -363,6 +363,87 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
 })();
 
 
+// --- Configuração Fiscal: holds an NF-e provider API token (CLAUDE.md
+// "Configuração Fiscal — scaffolding para NF-e"), designed to be Master-only
+// to read AND write — stricter than every other tab, including Usuários.
+// Had ZERO server-side authorization coverage before this block: the feature
+// was only ever verified at the DOM/UI level in headless Chrome. Found and
+// fixed while auditing (2026-10-25): a Master's own Configuração tab (used to
+// rename tabs for "any spreadsheet layout" companies) could alias
+// "lancamentos"/"estoque"/"lista:*" to the literal tab name "Configuração
+// Fiscal", and actionGetValues_ trusted that alias the same way it trusts a
+// legitimate ledger/stock rename — handing the API token to every Editor and
+// Visualizador in the company. Fixed in loadConfigTabs_/validConfigRow_ (now
+// excluded, same as Usuários/Configuração) and with an explicit FISCAL_TAB
+// branch in actionGetValues_ that never consults the Configuração mapping at
+// all, mirroring the write-side check that was already correct.
+(function () {
+  const state = freshState();
+  state[IPA]["Configuração Fiscal"] = [
+    ["Provedor", "Ambiente", "CNPJ Emissor", "Token/Chave de API", "Atualizado em"],
+    ["Focus NFe", "Homologação", "00.000.000/0000-00", "segredo-123", "45000"],
+  ];
+  const step = (who, body, id) => {
+    const d = makeDeps(state);
+    try { return { ok: true, data: handleRequest(Object.assign({ token: who, spreadsheetId: id || IPA }, body), d) }; }
+    catch (e) { return { ok: false, status: e.status, msg: e.message }; }
+  };
+  const rd = (who, range, id) => step(who, { action: "getValues", range: range }, id);
+  const wr = (who, range, row, id) => step(who, { action: "updateValues", range: range, values: [row] }, id);
+  const ok = (r) => r.ok === true;
+  const no = (r, code) => r.ok === false && r.status === (code || 403);
+  const T = (cond, name) => results.push((cond ? "PASS " : "FAIL ") + name);
+
+  T(ok(rd("mas", "'Configuração Fiscal'!A2:E2")), "Master reads Configuração Fiscal");
+  T(no(rd("edi", "'Configuração Fiscal'!A2:E2")) && no(rd("viz", "'Configuração Fiscal'!A2:E2")) && no(rd("nobody", "'Configuração Fiscal'!A2:E2")), "Editor, Visualizador and a stranger cannot read Configuração Fiscal");
+  T(ok(wr("mas", "'Configuração Fiscal'!A2:E2", ["Focus NFe", "Produção", "11.111.111/1111-11", "novo-token", "45010"])), "Master writes Configuração Fiscal");
+  T(no(wr("edi", "'Configuração Fiscal'!A2:E2", ["x", "y", "z", "w", "1"])) && no(wr("viz", "'Configuração Fiscal'!A2:E2", ["x", "y", "z", "w", "1"])), "Editor and Visualizador cannot write Configuração Fiscal");
+  T(no(rd("mas", "'Configuração Fiscal'!A2:E2", CAR)), "a Master of company A cannot read company B's Configuração Fiscal");
+
+  const titulos = (who) => step(who, { action: "getTitles" });
+  T(titulos("edi").ok && titulos("edi").data.titles.indexOf("Configuração Fiscal") === -1, "Configuração Fiscal never appears in an Editor's tab list");
+  T(titulos("viz").ok && titulos("viz").data.titles.indexOf("Configuração Fiscal") === -1, "…nor a Visualizador's");
+  T(titulos("mas").ok && titulos("mas").data.titles.indexOf("Configuração Fiscal") !== -1, "…but the Master's own list does include it");
+
+  // the Master cannot alias it into a readable role via Configuração, even deliberately
+  T(ok(wr("mas", "Configuração!A1:B1", ["Papel", "Aba"])), "the Master writes the Configuração header (sanity check before the refusals below)");
+  T(
+    no(wr("mas", "Configuração!A2:B2", ["lancamentos", "Configuração Fiscal"])) &&
+      no(wr("mas", "Configuração!A3:B3", ["estoque", "Configuração Fiscal"])) &&
+      no(wr("mas", "Configuração!A4:B4", ["lista:lojas", "Configuração Fiscal"])),
+    "Configuração Fiscal can never be named as a role tab in Configuração, same as Usuários/Configuração"
+  );
+
+  // a hostile Configuração written straight into the sheet (bypassing this
+  // app's own write API — someone with direct Sheets/Drive access) must not
+  // leak the fiscal credentials either: defense-in-depth beyond the
+  // write-side check just above, for a row that may already exist from
+  // before this fix shipped.
+  const hostil = freshState();
+  hostil[IPA]["Configuração Fiscal"] = [
+    ["Provedor", "Ambiente", "CNPJ Emissor", "Token/Chave de API", "Atualizado em"],
+    ["Focus NFe", "Homologação", "00.000.000/0000-00", "segredo-123", "45000"],
+  ];
+  hostil[IPA]["Configuração"] = [
+    ["Papel", "Aba"],
+    ["lancamentos", "Configuração Fiscal"],
+    ["estoque", "Configuração Fiscal"],
+    ["lista:lojas", "Configuração Fiscal"],
+  ];
+  const stepH = (who, body) => {
+    const d = makeDeps(hostil);
+    try { return { ok: true, data: handleRequest(Object.assign({ token: who, spreadsheetId: IPA }, body), d) }; }
+    catch (e) { return { ok: false, status: e.status, msg: e.message }; }
+  };
+  T(
+    no(stepH("edi", { action: "getValues", range: "'Configuração Fiscal'!A2:E2" })) &&
+      no(stepH("viz", { action: "getValues", range: "'Configuração Fiscal'!A2:E2" })),
+    "a hostile Configuração aliasing lancamentos/estoque/lista to Configuração Fiscal still does not leak it to Editor or Visualizador"
+  );
+  T(no(stepH("edi", { action: "updateValues", range: "'Configuração Fiscal'!A2:E2", values: [["x", "y", "z", "w", "1"]] })), "…nor does it let an Editor write it");
+  T(stepH("edi", { action: "getTitles" }).data.titles.indexOf("Configuração Fiscal") === -1, "…nor does it appear in that Editor's tab list");
+})();
+
 // --- security: object-prototype keys, odd types, tab-name disclosure
 (function () {
   const state = freshState();

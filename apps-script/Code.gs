@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-25-excluir-empresa";
+const GATEWAY_VERSION = "2026-10-25-auditoria-seguranca";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -765,7 +765,7 @@ function loadConfigTabs_(deps, spreadsheetId) {
   rows.slice(0, MAX_CONFIG_ROWS).forEach((row) => {
     const papel = typeof row[0] === "string" ? row[0].trim() : "";
     const aba = typeof row[1] === "string" ? row[1].trim() : "";
-    if (!papel || !aba || aba.length > 100 || aba === USUARIOS_TAB || aba === CONFIG_TAB) return;
+    if (!papel || !aba || aba.length > 100 || aba === USUARIOS_TAB || aba === CONFIG_TAB || aba === FISCAL_TAB) return;
     if (CONFIG_ROLES.indexOf(papel) !== -1) out[papel] = aba;
     else if (papel.indexOf("lista:") === 0 && CONFIG_LIST_KEYS.indexOf(papel.slice(6)) !== -1) out.listas.push(aba);
   });
@@ -1062,7 +1062,13 @@ function actionForwardRequest_(deps, email, body) {
   if (!isAdminEmail_(deps, email)) throw denied_();
   const linha = Number(body.linha);
   if (!Number.isInteger(linha) || linha < 2) throw new GatewayError_(400, "Pedido inválido.");
-  const company = companyMap_(deps)[body.spreadsheetId];
+  // Own keys only, same guard as despachar_'s own company lookup: a bare `map[id]`
+  // on "__proto__"/"constructor"/"toString" returns a truthy Object.prototype
+  // value instead of undefined, which would pass the `!company` check below.
+  // Only ADMIN_EMAILS reach this action, so this is defense-in-depth, not a
+  // closed hole an outside attacker could already reach.
+  const companyMapNow = companyMap_(deps);
+  const company = typeof body.spreadsheetId === "string" && Object.prototype.hasOwnProperty.call(companyMapNow, body.spreadsheetId) ? companyMapNow[body.spreadsheetId] : null;
   if (!company) throw new GatewayError_(400, "Empresa não encontrada.");
 
   return deps.lock(() => {
@@ -1109,6 +1115,14 @@ function actionGetValues_(deps, access, spreadsheet, body) {
   if (parsed.tab === USUARIOS_TAB) {
     // The full user list is admin data (the app reads the caller's own row via "me").
     if (access.perfil !== ROLE_MASTER && !access.bootstrapOk) throw denied_();
+  } else if (parsed.tab === FISCAL_TAB) {
+    // Always Master-only to read, checked by tab name directly — mirrors the
+    // write-side check below and never consults loadConfigTabs_ at all. This
+    // holds even if a Configuração row somehow names this tab for another
+    // role (a Master's mistake, or a row saved before loadConfigTabs_/
+    // validConfigRow_ started excluding FISCAL_TAB): the fiscal credentials
+    // can never become readable to anyone but the Master through that path.
+    if (access.perfil !== ROLE_MASTER) throw denied_();
   } else {
     if (!access.perfil) throw denied_();
     const cfg = loadConfigTabs_(deps, body.spreadsheetId);
@@ -1188,7 +1202,7 @@ function validConfigRow_(parsed, row) {
   const aba = row[1];
   if (papel === "" && aba === "") return true; // clearing a row
   if (typeof papel !== "string" || typeof aba !== "string") return false;
-  if (aba.trim() === "" || aba.length > 100 || aba === USUARIOS_TAB || aba === CONFIG_TAB) return false;
+  if (aba.trim() === "" || aba.length > 100 || aba === USUARIOS_TAB || aba === CONFIG_TAB || aba === FISCAL_TAB) return false;
   const okPapel = CONFIG_ROLES.indexOf(papel) !== -1 || (papel.indexOf("lista:") === 0 && CONFIG_LIST_KEYS.indexOf(papel.slice(6)) !== -1);
   return okPapel;
 }
