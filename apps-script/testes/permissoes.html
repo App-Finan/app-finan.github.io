@@ -25,7 +25,17 @@ function makeDeps(state) {
       getUltimoAlerta: () => state.__quotaAlerta || null,
       setUltimoAlerta: (d) => { state.__quotaAlerta = d; },
     },
-    registry: { list: () => state.__registry.slice(), add: (e) => { state.__registry.push({ spreadsheetId: e.spreadsheetId, empresa: e.empresa, sheetName: "Lançamento", segmento: e.segmento }); } },
+    registry: {
+      list: () => state.__registry.filter((e) => e.ativa !== false).map((e) => Object.assign({}, e)),
+      listAll: () => state.__registry.map((e) => Object.assign({}, e)),
+      add: (e) => { state.__registry.push({ spreadsheetId: e.spreadsheetId, empresa: e.empresa, sheetName: "Lançamento", segmento: e.segmento, ativa: true }); },
+      setActive: (spreadsheetId, ativa) => {
+        const e = state.__registry.filter((x) => x.spreadsheetId === spreadsheetId)[0];
+        if (!e) return false;
+        e.ativa = ativa;
+        return true;
+      },
+    },
     sheets: {
       getTitles: (id) => Object.keys(state[id]),
       getValues: (id, range) => { const tab = range.split("!")[0].replace(/^'|'$/g, ""); if (!state[id] || !state[id][tab]) throw new Error("Unable to parse range: " + range); return state[id][tab].slice(1); },
@@ -246,6 +256,53 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   results.push((!dup.ok && dup.status === 400 ? "PASS" : "FAIL") + " a second company with the same name is refused");
   const noSelf = step("admin", { action: "createCompany", nome: "Terceira", ownerEmail: "t@x.com", ownerNome: "T" });
   results.push((noSelf.ok && state[noSelf.data.spreadsheetId]["Usuários"].length === 2 ? "PASS" : "FAIL") + " incluirMeuAcesso=false leaves the admin out of the new company");
+})();
+
+// --- excluir empresa (setCompanyActive) — soft, reversible deactivation
+(function () {
+  const state = freshState();
+  const step = (who, body) => { const d = makeDeps(state); try { return { ok: true, data: handleRequest(Object.assign({ token: who }, body), d) }; } catch (e) { return { ok: false, status: e.status, msg: e.message }; } };
+  const made = step("admin", { action: "createCompany", nome: "Para Excluir", ownerEmail: "excluir@x.com", ownerNome: "Dono" });
+  const alvo = made.data.spreadsheetId;
+  TOKENS.excluirDono = "excluir@x.com";
+
+  ["viz", "edi", "mas", "nobody"].forEach((who) => {
+    const r = step(who, { action: "setCompanyActive", spreadsheetId: alvo, ativa: false });
+    results.push((!r.ok && r.status === 403 ? "PASS" : "FAIL") + " " + who + " cannot deactivate a company (admin-only)");
+  });
+
+  const fixa = step("admin", { action: "setCompanyActive", spreadsheetId: IPA, ativa: false });
+  results.push((!fixa.ok && fixa.status === 400 ? "PASS" : "FAIL") + " a 'fixa' company (Ipanema) cannot be deactivated this way");
+
+  const naoExiste = step("admin", { action: "setCompanyActive", spreadsheetId: "NAO-EXISTE", ativa: false });
+  results.push((!naoExiste.ok && naoExiste.status === 400 ? "PASS" : "FAIL") + " deactivating an unknown spreadsheetId is refused");
+
+  const antesMe = step("excluirDono", { action: "me" });
+  results.push((antesMe.ok && antesMe.data.companies.some((c) => c.spreadsheetId === alvo) ? "PASS" : "FAIL") + " before deactivation, the owner still sees the company");
+  const antesList = step("admin", { action: "listCompanies" });
+  results.push((antesList.data.empresas.filter((e) => e.spreadsheetId === alvo)[0].ativa === true ? "PASS" : "FAIL") + " listCompanies reports it as active before deactivation");
+
+  const off = step("admin", { action: "setCompanyActive", spreadsheetId: alvo, ativa: false });
+  results.push((off.ok && off.data.ativa === false ? "PASS" : "FAIL") + " admin deactivates the registry company");
+
+  const depoisMe = step("excluirDono", { action: "me" });
+  results.push((depoisMe.ok && !depoisMe.data.companies.some((c) => c.spreadsheetId === alvo) ? "PASS" : "FAIL") + " after deactivation, the owner no longer sees the company at all");
+  const bloqueado = step("excluirDono", { action: "getValues", spreadsheetId: alvo, range: "Estoque!A2:P" });
+  results.push((!bloqueado.ok && bloqueado.status === 403 ? "PASS" : "FAIL") + " every action against a deactivated company is refused, immediately, for everyone");
+  const depoisList = step("admin", { action: "listCompanies" });
+  const entradaInativa = depoisList.data.empresas.filter((e) => e.spreadsheetId === alvo)[0];
+  results.push((entradaInativa && entradaInativa.ativa === false ? "PASS" : "FAIL") + " listCompanies still shows the deactivated company (ativa:false), so it can be restored");
+  results.push((entradaInativa && entradaInativa.usuarios >= 1 ? "PASS" : "FAIL") + " its data (Usuários etc.) is still readable server-side while deactivated — nothing was deleted");
+
+  const naoAdminLista = step("mas", { action: "listCompanies" });
+  results.push((!naoAdminLista.ok && naoAdminLista.status === 403 ? "PASS" : "FAIL") + " listCompanies itself stays admin-only");
+
+  const on = step("admin", { action: "setCompanyActive", spreadsheetId: alvo, ativa: true });
+  results.push((on.ok && on.data.ativa === true ? "PASS" : "FAIL") + " admin restores (reactivates) the company");
+  const depoisMe2 = step("excluirDono", { action: "me" });
+  results.push((depoisMe2.ok && depoisMe2.data.companies.some((c) => c.spreadsheetId === alvo) ? "PASS" : "FAIL") + " after restoring, the owner sees the company again");
+  const desbloqueado = step("excluirDono", { action: "getValues", spreadsheetId: alvo, range: "Estoque!A2:P" });
+  results.push((desbloqueado.ok ? "PASS" : "FAIL") + " and can use it again");
 })();
 
 

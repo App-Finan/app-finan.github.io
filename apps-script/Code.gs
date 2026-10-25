@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-18-remove-calculadora-impostos";
+const GATEWAY_VERSION = "2026-10-25-excluir-empresa";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -406,6 +406,52 @@ function registryDeps_(cache) {
       cache.put("reg_list", JSON.stringify(out), 60);
       return out;
     },
+    // Unlike list() above, this ALSO returns inactive companies (with their
+    // real "Ativa" state) — used only by the system admin's company
+    // management screen, never by companyMap_/routing, so a deactivated
+    // company still shows up there (to be reactivated) but never becomes
+    // reachable again through the normal login/access path.
+    listAll: () => {
+      const id = props.getProperty(REGISTRY_PROP);
+      const out = [];
+      if (id) {
+        const data = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:F", { valueRenderOption: "UNFORMATTED_VALUE" });
+        (data.values || []).forEach((row) => {
+          if (!row[0]) return;
+          out.push({
+            spreadsheetId: String(row[0]),
+            empresa: String(row[1] || ""),
+            segmento: segmentoValido_(String(row[5] || "")),
+            ativa: String(row[4] || "Sim") !== "Não",
+          });
+        });
+      }
+      return out;
+    },
+    // Soft "exclusão": flips the Empresas tab's own "Ativa" column, never
+    // deletes the row or the company's spreadsheet. Once Ativa is "Não",
+    // companyMap_ (built from list() above) simply stops including this
+    // company — every gateway action on it then hits the ordinary "Empresa
+    // não permitida" refusal, for every user, immediately (no separate
+    // enforcement needed). Reversible: the same call with ativa=true
+    // reactivates it, same as Fornecedores' Ativo/Inativo or Contas'
+    // Cancelada/Reabrir elsewhere in this file — never a real delete, same
+    // convention as the rest of this app.
+    setActive: (spreadsheetId, ativa) => {
+      const id = props.getProperty(REGISTRY_PROP);
+      if (!id) return false;
+      const data = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:A", { valueRenderOption: "UNFORMATTED_VALUE" });
+      const rows = data.values || [];
+      for (let i = 0; i < rows.length; i += 1) {
+        if (String(rows[i][0]) === spreadsheetId) {
+          const linha = i + 2;
+          Sheets.Spreadsheets.Values.update({ values: [[ativa ? "Sim" : "Não"]] }, id, "Empresas!E" + linha + ":E" + linha, { valueInputOption: "RAW" });
+          cache.remove("reg_list");
+          return true;
+        }
+      }
+      return false;
+    },
     add: (entry) => {
       let id = props.getProperty(REGISTRY_PROP);
       if (!id) {
@@ -583,6 +629,7 @@ function despachar_(body, deps, email, sessaoSenha) {
   if (action === "resolveRequest") return actionResolveRequest_(deps, email, body);
   if (action === "listCompanies") return actionListCompanies_(deps, email);
   if (action === "forwardRequest") return actionForwardRequest_(deps, email, body);
+  if (action === "setCompanyActive") return actionSetCompanyActive_(deps, email, body);
 
   // Own keys only: "constructor" / "__proto__" / "toString" must not pass as a company id.
   const map = companyMap_(deps);
@@ -943,29 +990,69 @@ function actionResolveRequest_(deps, email, body) {
 // Administrative overview for the system console: which companies exist, how
 // many people each has and who their Master(s) are. No business data (no
 // lançamentos, no estoque) is ever returned here.
+// Lists EVERY company the admin can manage, active or not — unlike every
+// other place that reads companies (companyMap_), which only ever sees
+// active ones. A deactivated company still needs to show up here (with
+// ativa: false), or there would be no way to find and reactivate it again.
 function actionListCompanies_(deps, email) {
   if (!isAdminEmail_(deps, email)) throw denied_();
-  const known = companyMap_(deps);
   const fixed = deps.config.SPREADSHEETS;
-  const out = [];
-  Object.keys(known).slice(0, MAX_COMPANIES).forEach((spreadsheetId) => {
-    let usuarios = null;
-    try {
-      usuarios = loadUsuarios_(deps, spreadsheetId);
-    } catch (err) {
-      usuarios = null;
-    }
-    const list = usuarios || [];
-    out.push({
-      spreadsheetId: spreadsheetId,
-      empresa: known[spreadsheetId].empresa,
-      segmento: segmentoValido_(known[spreadsheetId].segmento),
-      origem: fixed[spreadsheetId] ? "fixa" : "criada",
-      usuarios: list.length,
-      masters: list.filter((u) => u.perfil === ROLE_MASTER).map((u) => ({ nome: u.nome, email: u.email })),
-    });
+  const entries = {};
+  Object.keys(fixed).forEach((id) => {
+    entries[id] = { empresa: fixed[id].empresa, segmento: segmentoValido_(fixed[id].segmento), origem: "fixa", ativa: true };
   });
+  const registradas = deps.registry && deps.registry.listAll ? deps.registry.listAll() : [];
+  registradas.forEach((c) => {
+    if (!Object.prototype.hasOwnProperty.call(entries, c.spreadsheetId)) {
+      entries[c.spreadsheetId] = { empresa: c.empresa, segmento: c.segmento, origem: "criada", ativa: c.ativa };
+    }
+  });
+  const out = Object.keys(entries)
+    .slice(0, MAX_COMPANIES)
+    .map((spreadsheetId) => {
+      const info = entries[spreadsheetId];
+      let usuarios = null;
+      try {
+        usuarios = loadUsuarios_(deps, spreadsheetId);
+      } catch (err) {
+        usuarios = null;
+      }
+      const list = usuarios || [];
+      return {
+        spreadsheetId: spreadsheetId,
+        empresa: info.empresa,
+        segmento: info.segmento,
+        origem: info.origem,
+        ativa: info.ativa,
+        usuarios: list.length,
+        masters: list.filter((u) => u.perfil === ROLE_MASTER).map((u) => ({ nome: u.nome, email: u.email })),
+      };
+    });
   return { empresas: out };
+}
+
+// Soft "excluir empresa" — see registryDeps_.setActive's own comment for why
+// this is a deactivation (reversible), not a real delete: the spreadsheet
+// and its data are untouched, only the registry's own "Ativa" flag flips, and
+// companyMap_ (hence every other gateway action) stops seeing that company
+// at all from that point on. A "fixa" company (hardcoded in
+// GATEWAY_CONFIG.SPREADSHEETS — Ipanema, Carolina today) has no registry row
+// to flip, so this is refused for those with a message explaining why; that
+// is a deliberate, rarer, code-level change, not a button in this screen.
+function actionSetCompanyActive_(deps, email, body) {
+  if (!isAdminEmail_(deps, email)) throw denied_();
+  const spreadsheetId = typeof body.spreadsheetId === "string" ? body.spreadsheetId : "";
+  if (!spreadsheetId) throw new GatewayError_(400, "Empresa inválida.");
+  if (Object.prototype.hasOwnProperty.call(deps.config.SPREADSHEETS, spreadsheetId)) {
+    throw new GatewayError_(400, "Essa empresa está fixa no código do servidor e não pode ser excluída por aqui.");
+  }
+  if (!deps.registry || !deps.registry.setActive) throw new GatewayError_(400, "Ação indisponível.");
+  const ativa = body.ativa === true;
+  return deps.lock(() => {
+    const achou = deps.registry.setActive(spreadsheetId, ativa);
+    if (!achou) throw new GatewayError_(400, "Empresa não encontrada no registro.");
+    return { ativa: ativa };
+  });
 }
 
 // A person who says they work at a company that already uses the app is not

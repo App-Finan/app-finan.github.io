@@ -36,6 +36,28 @@ async function loadEmpresasSistema() {
   }
 }
 
+// "Excluir" uma empresa aqui é reversível de propósito (mesmo padrão de
+// Fornecedores Ativo/Inativo e Contas Cancelada/Reabrir neste app) — os
+// dados continuam guardados, só o acesso de todo mundo àquela empresa é
+// cortado. Uma empresa "fixa" (Ipanema, Carolina — cadastradas direto no
+// Code.gs) não tem esse botão: o servidor já recusaria a ação, então nem
+// oferecemos o botão para não prometer algo que vai falhar.
+async function alternarEmpresaAtiva(empresa, ativa) {
+  const confirmado = ativa
+    ? true
+    : confirm(`Excluir "${empresa.empresa}"? Ela deixa de ser acessível para qualquer pessoa, mas os dados continuam guardados — você pode reverter isso depois.`);
+  if (!confirmado) return;
+  sistemaStatus("sistema-empresas-status", ativa ? "Restaurando..." : "Excluindo...");
+  try {
+    await gatewayCall("setCompanyActive", { spreadsheetId: empresa.spreadsheetId, ativa }, accessToken);
+    await loadEmpresasSistema();
+    sistemaStatus("sistema-empresas-status", ativa ? `"${empresa.empresa}" foi restaurada.` : `"${empresa.empresa}" foi excluída (os dados continuam guardados).`);
+  } catch (err) {
+    console.error(err);
+    if (!err.sessionExpired) sistemaStatus("sistema-empresas-status", `Erro: ${mensagemDoErro(err)}`);
+  }
+}
+
 function renderEmpresasSistema() {
   const list = document.getElementById("sistema-empresas");
   list.innerHTML = "";
@@ -48,9 +70,10 @@ function renderEmpresasSistema() {
   }
   sistemaEmpresas.forEach((empresa) => {
     const li = document.createElement("li");
+    li.className = "pedido-card";
     const nome = document.createElement("div");
     nome.className = "pedido-titulo";
-    nome.textContent = empresa.empresa;
+    nome.textContent = empresa.ativa ? empresa.empresa : `${empresa.empresa} (excluída)`;
     li.appendChild(nome);
     const meta = document.createElement("div");
     meta.className = "pedido-meta";
@@ -58,6 +81,18 @@ function renderEmpresasSistema() {
     const seg = getSegmento(empresa.segmento);
     meta.textContent = `${seg.nome} · ${empresa.origem === "fixa" ? "cadastrada no servidor" : "criada pelo app"} · ${empresa.usuarios} pessoa(s) · Master: ${masters}`;
     li.appendChild(meta);
+
+    if (empresa.origem === "criada") {
+      const acoes = document.createElement("div");
+      acoes.className = "pedido-acoes";
+      acoes.appendChild(
+        empresa.ativa
+          ? makeAdminButton("Excluir", () => alternarEmpresaAtiva(empresa, false), "usuario-action-danger")
+          : makeAdminButton("Restaurar", () => alternarEmpresaAtiva(empresa, true), "usuario-action-primary")
+      );
+      li.appendChild(acoes);
+    }
+
     list.appendChild(li);
   });
 }
