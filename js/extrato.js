@@ -196,52 +196,165 @@ function parseOfx(texto) {
 }
 
 // ---------------------------------------------------------------------------
-// CSV genérico — exige cabeçalho com Data/Descrição/Valor (em qualquer
-// ordem, qualquer um dos sinônimos abaixo); reusa converterData/converterNumero
-// (js/esquema.js) para aceitar os mesmos formatos de data/dinheiro que o
-// resto do app já entende.
+// CSV e .xlsx genéricos — o núcleo (interpretarLinhasExtrato, logo abaixo) é
+// compartilhado pelos dois: um CSV já separado por linha/delimitador e um
+// .xlsx lido por js/xlsx-leitor.js chegam aqui no mesmo formato (uma matriz
+// de linhas, cada célula já separada — string vindo do CSV, string OU número
+// vindo do .xlsx). Exige um cabeçalho com Data e (Valor, ou Crédito+Débito
+// em colunas separadas), em qualquer ordem, qualquer um dos sinônimos
+// abaixo; reusa converterData/converterNumero (js/esquema.js) para aceitar
+// os mesmos formatos de data/dinheiro que o resto do app já entende
+// (inclusive um número cru vindo do .xlsx como serial de data).
+//
+// Tolera também o formato "relatório de banco" que alguns bancos exportam
+// (ex.: o extrato "net empresa" do Bradesco, visto num PDF real anexado pelo
+// usuário — não um .xlsx verificado, ver a nota em CLAUDE.md) em vez de uma
+// tabela limpa de uma transação por linha: a Data só aparece na primeira
+// transação de cada dia (as de baixo herdam a última data vista), Crédito e
+// Débito ficam em colunas separadas em vez de um Valor único com sinal, e o
+// arquivo mistura "SALDO ANTERIOR"/linhas de "Total" e até outras tabelas
+// (ex.: saldos de aplicação financeira) no mesmo arquivo.
 // ---------------------------------------------------------------------------
 
-const EXTRATO_CSV_SINONIMOS = {
-  data: ["data", "dtlancamento", "dtmovimento", "dtposted"],
+const EXTRATO_SINONIMOS = {
+  data: ["data", "dtlancamento", "dtmovimento", "dtposted", "dia"],
   descricao: ["descricao", "historico", "lancamento", "detalhes", "memo"],
   valor: ["valor", "valorlancamento", "montante", "amount"],
+  credito: ["credito", "creditos"],
+  debito: ["debito", "debitos"],
+  documento: ["documento", "dcto", "numerodocumento", "nrdocumento"],
 };
 
 function normalizarCabecalhoExtratoCsv(texto) {
-  return normalizarTexto(String(texto || "")).replace(/[^a-z0-9]/g, "");
+  return normalizarTexto(String(texto === undefined || texto === null ? "" : texto)).replace(/[^a-z0-9]/g, "");
 }
 
 function detectarDelimitadorExtratoCsv(linha) {
   return linha.split(";").length >= linha.split(",").length ? ";" : ",";
 }
 
-function parseCsvExtrato(texto) {
-  const linhas = texto.split(/\r?\n/).filter((l) => l.trim() !== "");
-  if (!linhas.length) return [];
-  const delim = detectarDelimitadorExtratoCsv(linhas[0]);
-  const cabecalho = linhas[0].split(delim).map(normalizarCabecalhoExtratoCsv);
+function acharColunasExtrato(celulasNormalizadas) {
   const indices = {};
-  Object.keys(EXTRATO_CSV_SINONIMOS).forEach((campo) => {
-    const idx = cabecalho.findIndex((h) => EXTRATO_CSV_SINONIMOS[campo].some((s) => h.indexOf(s) !== -1));
+  Object.keys(EXTRATO_SINONIMOS).forEach((campo) => {
+    const idx = celulasNormalizadas.findIndex((h) => EXTRATO_SINONIMOS[campo].some((s) => h.indexOf(s) !== -1));
     if (idx !== -1) indices[campo] = idx;
   });
-  if (indices.data === undefined || indices.valor === undefined) {
-    throw new Error('Não encontrei as colunas de Data e Valor no CSV. Exporte com um cabeçalho ("Data", "Descrição", "Valor").');
-  }
-  const transacoes = [];
-  linhas.slice(1).forEach((linha) => {
-    const celulas = linha.split(delim);
-    const data = converterData(celulas[indices.data]);
-    const valor = converterNumero(celulas[indices.valor]);
-    if (!data || valor === null) return;
-    const descricao = indices.descricao !== undefined ? (celulas[indices.descricao] || "").trim() : "";
-    transacoes.push({ data, valor, descricao, origemId: null });
+  return indices;
+}
+
+// Uma linha "parece" um cabeçalho de tabela quando pelo menos duas de suas
+// células batem com algum campo conhecido — usado tanto para achar o
+// cabeçalho de verdade no topo do arquivo quanto para detectar o INÍCIO de
+// uma SEGUNDA tabela mais adiante no mesmo arquivo (relatórios de banco às
+// vezes emendam várias tabelas diferentes, ex. extrato + saldos de aplicação
+// financeira) e parar de importar ali, em vez de misturar dado de outra
+// natureza com as transações reais.
+function pareceCabecalhoExtrato(celulasNormalizadas) {
+  let achados = 0;
+  Object.keys(EXTRATO_SINONIMOS).forEach((campo) => {
+    if (celulasNormalizadas.some((h) => EXTRATO_SINONIMOS[campo].some((s) => h.indexOf(s) !== -1))) achados += 1;
   });
+  return achados >= 2;
+}
+
+// Linhas que não são transação nenhuma, mas aparecem misturadas com as
+// transações de verdade nesse tipo de relatório de banco.
+const EXTRATO_LINHAS_IGNORADAS = ["saldo anterior", "total", "totais"];
+
+function linhaEhIgnoravelExtrato(celula) {
+  const n = normalizarTexto(celula === undefined || celula === null ? "" : celula).trim();
+  return EXTRATO_LINHAS_IGNORADAS.indexOf(n) !== -1;
+}
+
+// O núcleo comum: uma matriz de linhas -> lista de transações.
+function interpretarLinhasExtrato(linhas) {
+  if (!linhas || !linhas.length) return [];
+
+  let indiceCabecalho = -1;
+  let indices = null;
+  for (let i = 0; i < linhas.length; i += 1) {
+    const normalizadas = linhas[i].map(normalizarCabecalhoExtratoCsv);
+    const candidatos = acharColunasExtrato(normalizadas);
+    // Crédito/Débito podem vir só um dos dois (ex.: um extrato filtrado só
+    // por créditos) — não exige os dois juntos, diferente do cálculo do
+    // valor em si logo abaixo, que já trata um dos dois ausente como null.
+    if (candidatos.data !== undefined && (candidatos.valor !== undefined || candidatos.credito !== undefined || candidatos.debito !== undefined)) {
+      indiceCabecalho = i;
+      indices = candidatos;
+      break;
+    }
+  }
+  if (indiceCabecalho === -1) {
+    throw new Error('Não encontrei as colunas de Data e Valor (ou Crédito/Débito). Exporte com um cabeçalho ("Data", "Descrição", "Valor").');
+  }
+
+  const transacoes = [];
+  let ultimaData = null;
+  for (let i = indiceCabecalho + 1; i < linhas.length; i += 1) {
+    const linha = linhas[i];
+    if (!linha || linha.every((c) => c === "" || c === null || c === undefined)) continue;
+
+    const normalizadas = linha.map(normalizarCabecalhoExtratoCsv);
+    if (pareceCabecalhoExtrato(normalizadas)) break; // uma segunda tabela começando — para por aqui
+
+    const celulaDescricao = indices.descricao !== undefined ? linha[indices.descricao] : undefined;
+    if (linhaEhIgnoravelExtrato(celulaDescricao) || linhaEhIgnoravelExtrato(linha[indices.data])) continue;
+
+    const dataLinha = converterData(linha[indices.data]);
+    if (dataLinha) ultimaData = dataLinha;
+
+    let valor = null;
+    if (indices.valor !== undefined) {
+      valor = converterNumero(linha[indices.valor]);
+    } else {
+      const credito = indices.credito !== undefined ? converterNumero(linha[indices.credito]) : null;
+      const debito = indices.debito !== undefined ? converterNumero(linha[indices.debito]) : null;
+      if (credito !== null && credito !== 0) valor = Math.abs(credito);
+      else if (debito !== null && debito !== 0) valor = -Math.abs(debito);
+    }
+
+    if (valor === null) {
+      // sem valor nesta linha: ou é lixo (cabeçalho de seção, rodapé, linha
+      // em branco), ou é a continuação da descrição da transação anterior
+      // (célula de texto que às vezes vem quebrada em duas linhas de
+      // verdade, dependendo de como o banco gerou o arquivo).
+      const texto = (celulaDescricao || "").toString().trim();
+      if (texto && transacoes.length && !dataLinha) {
+        const ultima = transacoes[transacoes.length - 1];
+        ultima.descricao = (ultima.descricao + " " + texto).trim();
+      }
+      continue;
+    }
+    if (!ultimaData) continue; // valor sem nenhuma data ainda vista — não dá pra usar
+
+    let descricao = (celulaDescricao || "").toString().replace(/\s*\n\s*/g, " ").trim();
+    if (indices.documento !== undefined && linha[indices.documento]) {
+      descricao = descricao ? `${descricao} (Dcto ${linha[indices.documento]})` : `Dcto ${linha[indices.documento]}`;
+    }
+    transacoes.push({ data: ultimaData, valor, descricao, origemId: null });
+  }
   return transacoes;
 }
 
-function parseArquivoExtrato(nomeArquivo, texto) {
+function parseCsvExtrato(texto) {
+  const linhasTexto = texto.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (!linhasTexto.length) return [];
+  const delim = detectarDelimitadorExtratoCsv(linhasTexto[0]);
+  const linhas = linhasTexto.map((l) => l.split(delim));
+  return interpretarLinhasExtrato(linhas);
+}
+
+// nomeArquivo + um File já lido (não um ArrayBuffer/texto pronto) porque o
+// .xlsx precisa ser lido como binário (arrayBuffer), diferente de
+// OFX/CSV (texto) — cada formato só lê o arquivo do jeito que precisa.
+async function parseArquivoExtratoAsync(file) {
+  const nomeArquivo = file && file.name ? file.name : "";
+  if (/\.xlsx$/i.test(nomeArquivo)) {
+    const buffer = await file.arrayBuffer();
+    const { linhas } = await lerXlsxComoLinhas(buffer);
+    return interpretarLinhasExtrato(linhas);
+  }
+  const texto = await file.text();
   const ehOfx = /\.ofx$/i.test(nomeArquivo) || /<OFX>/i.test(texto);
   return ehOfx ? parseOfx(texto) : parseCsvExtrato(texto);
 }

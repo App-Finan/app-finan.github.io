@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Testes da leitura de .xlsx</title></head>
+<body>
+<h3 style="font-family:sans-serif">Testes de js/xlsx-leitor.js e da interpretação de extrato (js/extrato.js)</h3>
+<pre id="out">rodando…</pre>
+<script>
+window.addEventListener("error", function (e) { document.getElementById("out").textContent = "ERRO: " + e.message + " (" + String(e.filename).split("/").pop() + ":" + e.lineno + ")"; });
+window.addEventListener("unhandledrejection", function (e) { document.getElementById("out").textContent = "REJEIÇÃO NÃO TRATADA: " + (e.reason && e.reason.stack ? e.reason.stack : e.reason); });
+</script>
+<script src="../js/esquema.js"></script>
+<script src="../js/xlsx-leitor.js"></script>
+<script src="../js/extrato.js"></script>
+<script>
+const results = [];
+const check = (name, cond) => results.push((cond ? "PASS " : "FAIL ") + name);
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// ---------------------------------------------------------------------------
+// Um escritor de zip minimalista PRÓPRIO deste teste (não o de js/modelo.js,
+// que só grava sem compressão) — precisa escrever TANTO sem compressão
+// (método 0, "store", o que js/modelo.js gera de verdade) QUANTO com
+// compressão de verdade (método 8, "deflate", via CompressionStream — o que
+// o Excel/Google Sheets gera), para testar os dois caminhos do leitor.
+// ---------------------------------------------------------------------------
+
+let tabelaCrcTeste = null;
+function crc32Teste(bytes) {
+  if (!tabelaCrcTeste) {
+    tabelaCrcTeste = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let c = n;
+      for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      tabelaCrcTeste[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) crc = tabelaCrcTeste[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+const u16Teste = (n) => [n & 0xff, (n >>> 8) & 0xff];
+const u32Teste = (n) => [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff];
+
+async function deflarBruto(bytes) {
+  const fluxo = new CompressionStream("deflate-raw");
+  const escritor = fluxo.writable.getWriter();
+  escritor.write(bytes);
+  escritor.close();
+  const resposta = new Response(fluxo.readable);
+  return new Uint8Array(await resposta.arrayBuffer());
+}
+
+// arquivos: [{ nome, texto, comprimir }] -> ArrayBuffer de um .zip válido
+async function criarZipTeste(arquivos) {
+  const codificador = new TextEncoder();
+  const partes = [];
+  const central = [];
+  let deslocamento = 0;
+  for (const arq of arquivos) {
+    const nome = codificador.encode(arq.nome);
+    const dadosPlanos = codificador.encode(arq.texto);
+    const crc = crc32Teste(dadosPlanos);
+    const dadosGravados = arq.comprimir ? await deflarBruto(dadosPlanos) : dadosPlanos;
+    const metodo = arq.comprimir ? 8 : 0;
+    const cabecalho = new Uint8Array([
+      ...u32Teste(0x04034b50), ...u16Teste(20), ...u16Teste(0x0800), ...u16Teste(metodo), ...u16Teste(0), ...u16Teste(0),
+      ...u32Teste(crc), ...u32Teste(dadosGravados.length), ...u32Teste(dadosPlanos.length), ...u16Teste(nome.length), ...u16Teste(0),
+    ]);
+    partes.push(cabecalho, nome, dadosGravados);
+    central.push(
+      new Uint8Array([
+        ...u32Teste(0x02014b50), ...u16Teste(20), ...u16Teste(20), ...u16Teste(0x0800), ...u16Teste(metodo), ...u16Teste(0), ...u16Teste(0),
+        ...u32Teste(crc), ...u32Teste(dadosGravados.length), ...u32Teste(dadosPlanos.length), ...u16Teste(nome.length), ...u16Teste(0), ...u16Teste(0),
+        ...u16Teste(0), ...u16Teste(0), ...u32Teste(0), ...u32Teste(deslocamento),
+      ]),
+      nome
+    );
+    deslocamento += cabecalho.length + nome.length + dadosGravados.length;
+  }
+  const tamanhoCentral = central.reduce((s, p) => s + p.length, 0);
+  const fim = new Uint8Array([
+    ...u32Teste(0x06054b50), ...u16Teste(0), ...u16Teste(0), ...u16Teste(arquivos.length), ...u16Teste(arquivos.length),
+    ...u32Teste(tamanhoCentral), ...u32Teste(deslocamento), ...u16Teste(0),
+  ]);
+  const todas = partes.concat(central, [fim]);
+  const total = todas.reduce((s, p) => s + p.length, 0);
+  const saida = new Uint8Array(total);
+  let pos = 0;
+  todas.forEach((p) => { saida.set(p, pos); pos += p.length; });
+  return saida.buffer;
+}
+
+// Monta os arquivos de um .xlsx mínimo de uma aba só. celulasXml é o XML das
+// <row> já prontas (controle total para testar inlineStr/sharedStrings/
+// número/data cru).
+function arquivosXlsxMinimo(celulasXml, sharedStringsXml) {
+  const arquivos = [
+    { nome: "[Content_Types].xml", texto: '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>' },
+    { nome: "_rels/.rels", texto: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { nome: "xl/workbook.xml", texto: '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Extrato" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { nome: "xl/_rels/workbook.xml.rels", texto: '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+    { nome: "xl/worksheets/sheet1.xml", texto: '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + celulasXml + '</sheetData></worksheet>' },
+  ];
+  if (sharedStringsXml) arquivos.push({ nome: "xl/sharedStrings.xml", texto: sharedStringsXml });
+  return arquivos;
+}
+
+function celulaInline(ref, texto) { return `<c r="${ref}" t="inlineStr"><is><t>${texto}</t></is></c>`; }
+function celulaCompartilhada(ref, indice) { return `<c r="${ref}" t="s"><v>${indice}</v></c>`; }
+function celulaNum(ref, numero) { return `<c r="${ref}"><v>${numero}</v></c>`; }
+
+(async function () {
+  // --- A: ida-e-volta do leitor de .xlsx, sem compressão (o que js/modelo.js gera)
+  {
+    const linhasXml =
+      '<row r="1">' + celulaInline("A1", "Data") + celulaInline("B1", "Descrição") + celulaInline("C1", "Valor") + "</row>" +
+      '<row r="2">' + celulaNum("A2", 45901) + celulaInline("B2", "Compra teste") + celulaNum("C2", -150.5) + "</row>";
+    const buffer = await criarZipTeste(arquivosXlsxMinimo(linhasXml, null));
+    const resultado = await lerXlsxComoLinhas(buffer);
+    check("xlsx sem compressão: acha a aba certa", resultado.abas.length === 1 && resultado.abas[0] === "Extrato");
+    check("xlsx sem compressão: linha de cabeçalho correta", same(resultado.linhas[0], ["Data", "Descrição", "Valor"]));
+    check("xlsx sem compressão: número cru fica número (não texto)", resultado.linhas[1][0] === 45901 && typeof resultado.linhas[1][0] === "number");
+    check("xlsx sem compressão: inlineStr vira texto", resultado.linhas[1][1] === "Compra teste");
+    check("xlsx sem compressão: número negativo", resultado.linhas[1][2] === -150.5);
+    check("xlsx: data crua (serial 45901, conferido à parte = 01/09/2025) convertida certo por converterData", (() => {
+      const d = converterData(resultado.linhas[1][0]);
+      return d && d.getUTCFullYear() === 2025 && d.getUTCMonth() === 8 && d.getUTCDate() === 1;
+    })());
+  }
+
+  // --- B: ida-e-volta COM sharedStrings (o que Excel/Sheets realmente gera)
+  {
+    const sharedStringsXml = '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><t>Data</t></si><si><t>PIX RECEBIDO</t></si></sst>';
+    const linhasXml =
+      '<row r="1">' + celulaCompartilhada("A1", 0) + "</row>" +
+      '<row r="2">' + celulaCompartilhada("B2", 1) + "</row>";
+    const buffer = await criarZipTeste(arquivosXlsxMinimo(linhasXml, sharedStringsXml));
+    const resultado = await lerXlsxComoLinhas(buffer);
+    check("xlsx com sharedStrings: resolve o índice certo", resultado.linhas[0][0] === "Data" && resultado.linhas[1][1] === "PIX RECEBIDO");
+  }
+
+  // --- C: ida-e-volta COM compressão real (deflate-raw) — o caminho que um banco de verdade usa
+  {
+    const linhasXml = '<row r="1">' + celulaInline("A1", "Data") + celulaInline("B1", "Valor") + "</row>" + '<row r="2">' + celulaNum("A2", 45901) + celulaNum("B2", 99.9) + "</row>";
+    const buffer = await criarZipTeste(arquivosXlsxMinimo(linhasXml, null).map((a) => Object.assign({}, a, { comprimir: true })));
+    const resultado = await lerXlsxComoLinhas(buffer);
+    check("xlsx COM compressão deflate: lê corretamente", resultado.linhas[1][0] === 45901 && resultado.linhas[1][1] === 99.9);
+  }
+
+  // --- D: arquivo lacunar (coluna pulada vira "") e linha totalmente vazia no meio
+  {
+    const linhasXml = '<row r="1">' + celulaInline("A1", "x") + celulaInline("C1", "z") + "</row>" + '<row r="2"></row>';
+    const buffer = await criarZipTeste(arquivosXlsxMinimo(linhasXml, null));
+    const resultado = await lerXlsxComoLinhas(buffer);
+    check("xlsx: coluna B pulada vira string vazia (matriz densa)", same(resultado.linhas[0], ["x", "", "z"]));
+    check("xlsx: linha sem nenhuma célula vira array de vazios do mesmo tamanho", same(resultado.linhas[1], ["", "", ""]));
+  }
+
+  // --- E: arquivo inválido/corrompido não trava, dá erro claro
+  {
+    let erro = null;
+    try { await lerXlsxComoLinhas(new TextEncoder().encode("isto não é um zip").buffer); } catch (e) { erro = e; }
+    check("xlsx: arquivo que não é zip dá erro com mensagem (não trava)", erro instanceof Error && erro.message.length > 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // F: interpretarLinhasExtrato — tolerâncias do formato "relatório de banco"
+  // (baseado na estrutura real revelada por um PDF do extrato "net empresa" do
+  // Bradesco anexado pelo usuário — ver a nota em CLAUDE.md: não testado
+  // contra um .xlsx de verdade desse banco, só contra essa estrutura).
+  // ---------------------------------------------------------------------------
+
+  // F1: caso simples, uma transação por linha (comportamento antigo, continua igual)
+  {
+    const linhas = [["Data", "Descrição", "Valor"], ["01/01/2026", "Venda", "100,00"], ["02/01/2026", "Compra", "-50,00"]];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F1: caso simples — 2 transações", t.length === 2);
+    check("F1: valores certos", t[0].valor === 100 && t[1].valor === -50);
+  }
+
+  // F2: Crédito/Débito em colunas separadas (sem um Valor único)
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["17/08/2026", "PIX RECEBIDO", "32.000,00", ""],
+      ["", "DEBITO AUTOMATICO", "", "179,90"],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F2: crédito vira valor positivo", t[0].valor === 32000);
+    check("F2: débito vira valor negativo", t[1].valor === -179.9);
+  }
+
+  // F3: data só na primeira transação do dia — preenchida para baixo
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["17/08/2026", "PIX RECEBIDO A", "10,00", ""],
+      ["", "PIX RECEBIDO B", "20,00", ""],
+      ["", "PIX RECEBIDO C", "30,00", ""],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F3: as 3 transações herdam a mesma data", t.length === 3 && t.every((x) => x.data.getTime() === t[0].data.getTime()));
+    check("F3: data é mesmo 17/08/2026", t[0].data.getUTCDate() === 17 && t[0].data.getUTCMonth() === 7);
+  }
+
+  // F4: "SALDO ANTERIOR" não é transação
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["14/08/2026", "SALDO ANTERIOR", "", ""],
+      ["17/08/2026", "PIX RECEBIDO", "10,00", ""],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F4: SALDO ANTERIOR é ignorado", t.length === 1 && t[0].descricao.indexOf("SALDO") === -1);
+  }
+
+  // F5: linha "Total" (na coluna da Data) é ignorada
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["17/08/2026", "PIX RECEBIDO", "10,00", ""],
+      ["Total", "", "10,00", "0,00"],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F5: linha Total é ignorada", t.length === 1);
+  }
+
+  // F6: linha de continuação (sem data nem valor, só texto) vira parte da descrição anterior
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["17/08/2026", "PIX RECEBIDO", "10,00", ""],
+      ["", "REM: Márcio de Jesus Soare 15/08", "", ""],
+      ["18/08/2026", "PIX ENVIADO", "", "5,00"],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F6: continuação não vira transação própria", t.length === 2);
+    check("F6: continuação é anexada à descrição da transação anterior", t[0].descricao.indexOf("REM: Márcio") !== -1);
+  }
+
+  // F7: uma segunda tabela (outro cabeçalho) mais adiante faz parar de importar
+  {
+    const linhas = [
+      ["Data", "Lançamento", "Crédito (R$)", "Débito (R$)"],
+      ["17/08/2026", "PIX RECEBIDO", "10,00", ""],
+      ["Data", "Histórico", "Valor (R$)"],
+      ["18/08/2026", "SALDO INVEST FÁCIL", "14.484,14"],
+    ];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F7: para na segunda tabela — não importa saldos de aplicação como transação", t.length === 1);
+  }
+
+  // F8: coluna de documento, quando existe, vai para a descrição
+  {
+    const linhas = [["Data", "Lançamento", "Dcto.", "Crédito (R$)"], ["17/08/2026", "PIX RECEBIDO", "649568", "10,00"]];
+    const t = interpretarLinhasExtrato(linhas);
+    check("F8: número do documento aparece na descrição", t[0].descricao.indexOf("649568") !== -1);
+  }
+
+  // F9: sem Data/Valor reconhecíveis -> erro claro
+  {
+    let erro = null;
+    try { interpretarLinhasExtrato([["Coisa", "Outra coisa"], ["x", "y"]]); } catch (e) { erro = e; }
+    check("F9: sem cabeçalho reconhecível dá erro com mensagem", erro instanceof Error && /Data e Valor/.test(erro.message));
+  }
+
+  // F10: parseCsvExtrato (o caminho CSV completo, ponta a ponta) continua funcionando com ; e com Crédito/Débito
+  {
+    const csv = "Data;Lançamento;Crédito (R$);Débito (R$)\n17/08/2026;PIX RECEBIDO;10,00;\n;DEBITO AUTOMATICO;;5,00\n";
+    const t = parseCsvExtrato(csv);
+    check("F10: CSV com ; e Crédito/Débito — 2 transações", t.length === 2);
+    check("F10: segunda transação herda a data da primeira", t[1].data.getTime() === t[0].data.getTime());
+    check("F10: segunda transação é débito (negativa)", t[1].valor === -5);
+  }
+
+  document.getElementById("out").textContent = results.join("\n") + "\n\nTOTAL " + results.length + "  FAILED " + results.filter((r) => r.indexOf("FAIL") === 0).length;
+})();
+</script>
+</body></html>

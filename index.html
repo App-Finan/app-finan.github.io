@@ -862,7 +862,7 @@
       <section class="view-section" data-view="extrato-bancario" id="view-extrato-bancario" hidden>
         <section class="card">
           <h2>Importar extrato</h2>
-          <p class="field-hint">Baixe o extrato do seu banco em formato OFX (recomendado) ou CSV e importe aqui — nenhuma transação é duplicada ao reimportar um período que se repete.</p>
+          <p class="field-hint">Baixe o extrato do seu banco em formato OFX (recomendado), CSV ou XLSX e importe aqui — nenhuma transação é duplicada ao reimportar um período que se repete.</p>
           <form id="extrato-import-form" class="lancamento-form">
             <div class="form-grid">
               <div class="form-field">
@@ -870,8 +870,8 @@
                 <select id="extrato-import-conta"></select>
               </div>
               <div class="form-field">
-                <label for="extrato-import-arquivo">Arquivo (.ofx ou .csv)</label>
-                <input type="file" id="extrato-import-arquivo" accept=".ofx,.csv,text/plain">
+                <label for="extrato-import-arquivo">Arquivo (.ofx, .csv ou .xlsx)</label>
+                <input type="file" id="extrato-import-arquivo" accept=".ofx,.csv,.xlsx,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
               </div>
             </div>
             <div class="form-actions">
@@ -1261,6 +1261,7 @@
 <script src="js/fornecedores-ui.js"></script>
 <script src="js/contas.js"></script>
 <script src="js/contas-ui.js"></script>
+<script src="js/xlsx-leitor.js"></script>
 <script src="js/extrato.js"></script>
 <script src="js/extrato-ui.js"></script>
 <script src="js/relatorio.js"></script>

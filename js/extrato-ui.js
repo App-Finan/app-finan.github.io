@@ -262,15 +262,14 @@ function setupExtratoUi() {
     const fileInput = document.getElementById("extrato-import-arquivo");
     const file = fileInput.files && fileInput.files[0];
     if (!contaValue) return extratoImportStatus("Selecione a conta.", true);
-    if (!file) return extratoImportStatus("Escolha um arquivo .ofx ou .csv.", true);
+    if (!file) return extratoImportStatus("Escolha um arquivo .ofx, .csv ou .xlsx.", true);
 
     extratoImportando = true;
     const submitBtn = document.getElementById("btn-importar-extrato");
     submitBtn.disabled = true;
     extratoImportStatus("Lendo arquivo...");
     try {
-      const texto = await file.text();
-      const transacoes = parseArquivoExtrato(file.name, texto);
+      const transacoes = await parseArquivoExtratoAsync(file);
       if (!transacoes.length) {
         extratoImportStatus("Não encontrei nenhuma transação nesse arquivo.", true);
         return;
