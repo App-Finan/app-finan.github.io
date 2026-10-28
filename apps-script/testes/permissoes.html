@@ -1276,6 +1276,170 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
   }
 })();
 
+// --- e-mail -> empresa index (2026-10-28, SaaS scaling prerequisite — see
+// CLAUDE.md). The real thing being tested: me/autorizadoEmAlgumaEmpresa_
+// must return EXACTLY the same answer with the index as without it — the
+// index may only change HOW MANY Usuários tabs get read, never WHO gets
+// access. Same makeDeps-wrapping pattern as pushDeps above.
+(function () {
+  function indiceDeps(state) {
+    state.__indice = state.__indice || [];
+    state.__leituras = state.__leituras || [];
+    const deps = makeDeps(state);
+    const getValuesOriginal = deps.sheets.getValues;
+    deps.sheets.getValues = (id, range, opt) => {
+      state.__leituras.push(id + "!" + range);
+      return getValuesOriginal(id, range, opt);
+    };
+    deps.indiceEmails = {
+      listarEmpresasDoEmail: (canon) => state.__indice.filter((l) => l.email === canon).map((l) => l.spreadsheetId),
+      adicionar: (canon, spreadsheetId) => {
+        if (!state.__indice.some((l) => l.email === canon && l.spreadsheetId === spreadsheetId)) {
+          state.__indice.push({ email: canon, spreadsheetId: spreadsheetId });
+        }
+      },
+      substituirEmpresa: (spreadsheetId, emails) => {
+        state.__indice = state.__indice.filter((l) => l.spreadsheetId !== spreadsheetId).concat(emails.map((e) => ({ email: e, spreadsheetId: spreadsheetId })));
+      },
+    };
+    return deps;
+  }
+
+  const EMP3 = "EMP3ID";
+  const EMP4 = "EMP4ID";
+  // 4 known companies total; "viz@x.com" (from the shared freshState fixture)
+  // is a member of IPA only — CAR, EMP3 and EMP4 all have Usuários tabs that
+  // do not list them (CAR's has none at all, like every other suite in this
+  // file already assumes).
+  function estadoComQuatroEmpresas() {
+    const state = freshState();
+    state.__indice = [];
+    state.__leituras = [];
+    state.__registry.push({ spreadsheetId: EMP3, empresa: "Empresa 3", sheetName: "Lançamento", segmento: "outro", ativa: true });
+    state.__registry.push({ spreadsheetId: EMP4, empresa: "Empresa 4", sheetName: "Lançamento", segmento: "outro", ativa: true });
+    state[EMP3] = { "Lançamento": [[]], Usuários: [["Email", "Nome", "Perfil"]] };
+    state[EMP4] = { "Lançamento": [[]], Usuários: [["Email", "Nome", "Perfil"]] };
+    return state;
+  }
+  const T = (cond, name) => results.push((cond ? "PASS " : "FAIL ") + name);
+  const leiturasDeUsuarios = (state) => state.__leituras.filter((l) => l.indexOf("Usuários") !== -1).length;
+
+  // Deploy safety: an empty index (day one after this ships) must not lock
+  // anyone out — me still finds the right company via the old full scan.
+  {
+    const state = estadoComQuatroEmpresas();
+    const deps = indiceDeps(state);
+    const r = handleRequest({ token: "viz", action: "me" }, deps);
+    T(r.companies.length === 1 && r.companies[0].spreadsheetId === IPA, "empty index: me still finds viz's one real company (fallback scan)");
+    T(leiturasDeUsuarios(state) === 4, "…by reading all 4 companies' Usuários, same cost as before this feature");
+    T(state.__indice.some((l) => l.email === "viz@x.com" && l.spreadsheetId === IPA), "…and that fallback scan self-heals the index for next time");
+  }
+
+  // Second login: the now-populated index makes me fast — only IPA's
+  // Usuários gets read, not all 4 — while returning the exact same result.
+  // A fresh indiceDeps(state) (same state, new 20 s loadUsuarios_ cache) for
+  // the second call is what actually isolates "the index narrows which
+  // companies get read" from "the per-call cache also avoids a re-read" —
+  // reusing the same deps/cache for both calls would hide the real count.
+  {
+    const state = estadoComQuatroEmpresas();
+    handleRequest({ token: "viz", action: "me" }, indiceDeps(state)); // first login, populates the index (asserted above already)
+    state.__leituras = []; // only count the SECOND call
+    const r2 = handleRequest({ token: "viz", action: "me" }, indiceDeps(state));
+    T(r2.companies.length === 1 && r2.companies[0].spreadsheetId === IPA, "indexed login: same correct result as the fallback scan");
+    T(leiturasDeUsuarios(state) === 1, "…but reading only the ONE company the index says viz is in, not all 4");
+  }
+
+  // A company pre-seeded directly into the index (no fallback scan needed at
+  // all) behaves identically — the index isn't just "the fallback scan in
+  // disguise," a genuinely pre-populated entry works the same way.
+  {
+    const state = estadoComQuatroEmpresas();
+    state.__indice.push({ email: "viz@x.com", spreadsheetId: IPA });
+    const deps = indiceDeps(state);
+    const r = handleRequest({ token: "viz", action: "me" }, deps);
+    T(r.companies.length === 1 && r.companies[0].spreadsheetId === IPA, "pre-populated index: correct result with zero fallback needed");
+    T(leiturasDeUsuarios(state) === 1, "…exactly one Usuários read, the indexed company only");
+  }
+
+  // A stale index entry (points at a company the person is NOT actually in
+  // any more, e.g. removed outside the app) can only cost an extra read — it
+  // can NEVER grant access getAccess_'s live read doesn't confirm.
+  {
+    const state = estadoComQuatroEmpresas();
+    state.__indice.push({ email: "viz@x.com", spreadsheetId: EMP3 }); // stale: viz is not really in EMP3
+    const deps = indiceDeps(state);
+    const r = handleRequest({ token: "viz", action: "me" }, deps);
+    T(r.companies.length === 0, "a stale index entry never grants access — the live read of EMP3's Usuários says no");
+  }
+
+  // Admins always get the real full scan, index or not — bootstrap discovery
+  // (an EMPTY company, like CAR here) has no index entry to find by nature.
+  {
+    const state = estadoComQuatroEmpresas();
+    state.__indice.push({ email: ADMIN_EMAIL, spreadsheetId: IPA }); // admin IS indexed for Ipanema already
+    const deps = indiceDeps(state);
+    const r = handleRequest({ token: "admin", action: "me" }, deps);
+    T(r.companies.length === 1 && r.companies[0].spreadsheetId === IPA, "admin: real membership (Ipanema) still correct");
+    T(r.bootstrap.some((b) => b.spreadsheetId === CAR), "…and bootstrap still finds Carolina's empty Usuários tab, which no index could ever contain");
+    T(leiturasDeUsuarios(state) === 4, "…by always doing the full scan for an admin, never trusting the index alone for bootstrap");
+  }
+
+  // Writing to Usuários (add a person) syncs the index immediately — no
+  // fallback scan needed on their very first login.
+  {
+    const state = estadoComQuatroEmpresas();
+    const deps = indiceDeps(state);
+    handleRequest({ token: "mas", action: "updateValues", spreadsheetId: IPA, range: "Usuários!A6:C6", values: [["novo@x.com", "Novo", "Editor"]] }, deps);
+    T(state.__indice.some((l) => l.email === "novo@x.com" && l.spreadsheetId === IPA), "adding a person via updateValues indexes them immediately");
+    state.__leituras = [];
+    // A fresh indiceDeps(state) for "novo"'s own login, same reason as the
+    // second-login test above: reusing the Master's deps/cache from the
+    // write above would hide behind that cache instead of proving the index
+    // itself is what limits this read.
+    const depsNovo = indiceDeps(state);
+    const r = handleRequest({ token: "novo", action: "me" }, Object.assign({}, depsNovo, { verifyToken: (t) => (t === "novo" ? "novo@x.com" : depsNovo.verifyToken(t)) }));
+    T(r.companies.length === 1 && r.companies[0].spreadsheetId === IPA, "…so their very first login already uses the fast indexed path");
+    T(leiturasDeUsuarios(state) === 1, "…one read, not a fallback scan of all 4 companies");
+  }
+
+  // Removing a person (blanking their row, same as removeUsuario) takes them
+  // out of the index too — substituirEmpresa replaces the WHOLE company
+  // slice from the real tab, so a cleared row simply isn't in it any more.
+  {
+    const state = estadoComQuatroEmpresas();
+    const deps = indiceDeps(state);
+    handleRequest({ token: "viz", action: "me" }, deps); // populate the index for viz first
+    T(state.__indice.some((l) => l.email === "viz@x.com" && l.spreadsheetId === IPA), "sanity: viz is indexed before removal");
+    handleRequest({ token: "mas", action: "updateValues", spreadsheetId: IPA, range: "Usuários!A2:C2", values: [["", "", ""]] }, deps);
+    T(!state.__indice.some((l) => l.email === "viz@x.com" && l.spreadsheetId === IPA), "removing the person (blanking the row) removes them from the index too");
+  }
+
+  // Creating a brand-new company (actionCreateCompany_) indexes its founding
+  // Master right away — their very first "me" after creating it is already fast.
+  {
+    const state = freshState();
+    const deps = indiceDeps(state);
+    const criada = handleRequest({ token: "admin", action: "createCompany", nome: "Empresa Nova", ownerEmail: "dono@x.com", ownerNome: "Dono" }, deps);
+    T(state.__indice.some((l) => l.email === "dono@x.com" && l.spreadsheetId === criada.spreadsheetId), "the founding Master of a just-created company is indexed immediately, no fallback scan needed on their first login");
+  }
+
+  // autorizadoEmAlgumaEmpresa_ (the e-mail+senha auto-approval check) must
+  // give the exact same yes/no answer whether or not the index has anything
+  // for that e-mail — tested directly (it is a plain global function, the
+  // same way other pure-logic functions in this suite are unit-tested).
+  {
+    const state = estadoComQuatroEmpresas();
+    const deps = indiceDeps(state);
+    T(autorizadoEmAlgumaEmpresa_(deps, "viz@x.com") === true, "autorizadoEmAlgumaEmpresa_: empty index still finds a real member via fallback scan");
+    T(autorizadoEmAlgumaEmpresa_(deps, "ninguem@x.com") === false, "…and correctly says no for someone genuinely nowhere");
+    state.__indice.push({ email: "viz@x.com", spreadsheetId: IPA });
+    T(autorizadoEmAlgumaEmpresa_(deps, "viz@x.com") === true, "…same true answer once the index already has the real entry");
+    state.__indice.push({ email: "ninguem@x.com", spreadsheetId: EMP3 }); // stale: not really in EMP3's Usuários
+    T(autorizadoEmAlgumaEmpresa_(deps, "ninguem@x.com") === false, "…and a stale index entry still can't produce a false yes — the live read of EMP3 says no");
+  }
+})();
+
 const failed = results.filter((r) => r.indexOf("FAIL") === 0);
 document.getElementById("out").textContent = results.join("\n") + "\n\nTOTAL " + results.length + "  FAILED " + failed.length;
 </script></body></html>

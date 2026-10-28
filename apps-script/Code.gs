@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-25-auditoria-seguranca";
+const GATEWAY_VERSION = "2026-10-28-indice-emails";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -319,6 +319,7 @@ function realDeps_() {
     secrets: secretsDeps_(),
     quotaEmail: quotaEmailDeps_(),
     pushTokens: pushTokensDeps_(cache),
+    indiceEmails: indiceEmailsDeps_(cache),
     push: {
       enviar: (token, titulo, corpo) =>
         enviarPushFCM_({ cache: { get: (k) => cache.get(k), put: (k, v, s) => cache.put(k, v, s) }, now: () => Date.now() }, token, titulo, corpo, GATEWAY_CONFIG.APP_URL),
@@ -792,9 +793,15 @@ function getAccess_(deps, email, spreadsheetId) {
 // administrator's separate approval to get a password — the Master's own
 // act of adding them already is the approval. A company that fails to read
 // is skipped, not treated as a match.
+// The index (see "E-mail -> empresa index" above) only ever NARROWS which
+// companies get a live Usuários read — it is never trusted on its own for a
+// yes/no answer, so a stale or empty index can only make this slower (fall
+// back to every company), never say "authorized" about someone who isn't.
 function autorizadoEmAlgumaEmpresa_(deps, canon) {
   const empresas = companyMap_(deps);
-  return Object.keys(empresas).some((id) => {
+  const candidatos = deps.indiceEmails ? deps.indiceEmails.listarEmpresasDoEmail(canon).filter((id) => empresas[id]) : [];
+  const ids = candidatos.length ? candidatos : Object.keys(empresas);
+  return ids.some((id) => {
     try {
       return (loadUsuarios_(deps, id) || []).some((u) => u.chave === canon);
     } catch (err) {
@@ -807,7 +814,19 @@ function actionMe_(deps, email) {
   const companies = [];
   const bootstrap = [];
   const known = companyMap_(deps);
-  Object.keys(known).forEach((spreadsheetId) => {
+  const canon = canonEmail_(email);
+  // Admins always get the full scan: bootstrap (finding an EMPTY company to
+  // found) has no index entry to find by definition — nobody is listed yet.
+  // Everyone else only ever needs the companies the index already knows
+  // about them being in; an empty/stale result falls back to the full scan
+  // for correctness, and that fallback self-heals the index for next time
+  // (see the "Deploy safety" note on the index block above).
+  const admin = isAdminEmail_(deps, email);
+  const candidatosIndice = deps.indiceEmails ? deps.indiceEmails.listarEmpresasDoEmail(canon).filter((id) => known[id]) : [];
+  const varreduraCompleta = admin || candidatosIndice.length === 0;
+  const idsParaChecar = varreduraCompleta ? Object.keys(known) : candidatosIndice;
+
+  idsParaChecar.forEach((spreadsheetId) => {
     const info = known[spreadsheetId];
     let access;
     try {
@@ -825,6 +844,10 @@ function actionMe_(deps, email) {
         perfil: access.entry.perfil,
         linha: access.entry.linha,
       });
+      // Self-heal: only reached via the full-scan fallback (the indexed path
+      // only ever visits companies already in the index), so this is the
+      // index catching up, never duplicate work on the fast path.
+      if (varreduraCompleta && !admin && deps.indiceEmails) deps.indiceEmails.adicionar(canon, spreadsheetId);
     } else if (access.bootstrapOk) {
       bootstrap.push({ spreadsheetId: spreadsheetId, empresa: info.empresa, sheetName: info.sheetName, segmento: segmentoValido_(info.segmento) });
     }
@@ -885,6 +908,7 @@ function actionCreateCompany_(deps, email, body) {
     });
     deps.registry.add({ spreadsheetId: spreadsheetId, empresa: nome, criadaPor: email, segmento: segmento });
     deps.cache.remove("usr_" + spreadsheetId);
+    reindexarEmpresaUsuarios_(deps, spreadsheetId);
     return { spreadsheetId: spreadsheetId, empresa: nome, sheetName: "Lançamento", segmento: segmento };
   });
 }
@@ -1184,7 +1208,10 @@ function actionUpdateValues_(deps, email, access, spreadsheet, body) {
 
   return deps.lock(() => {
     deps.sheets.updateValues(body.spreadsheetId, body.range, [row]);
-    if (parsed.tab === USUARIOS_TAB) deps.cache.remove("usr_" + body.spreadsheetId);
+    if (parsed.tab === USUARIOS_TAB) {
+      deps.cache.remove("usr_" + body.spreadsheetId);
+      reindexarEmpresaUsuarios_(deps, body.spreadsheetId);
+    }
     if (parsed.tab === CONFIG_TAB) deps.cache.remove("cfg_" + body.spreadsheetId);
     return { updated: true };
   });
@@ -2277,6 +2304,165 @@ function pushTokensDeps_(cache) {
       }
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// E-mail -> empresa index (2026-10-28, "SaaS Fase 2" scaling prerequisite —
+// see CLAUDE.md). Problem: actionMe_ runs on EVERY login, for EVERY user, and
+// used to read EVERY company's Usuários tab to find which ones that e-mail
+// belongs to — fine at ~20 companies, but login gets slower for EVERYONE as
+// the company count grows, long before MAX_COMPANIES is ever hit. This index
+// (a tab in the registry spreadsheet, one row per e-mail+company membership)
+// turns that into "read the companies this e-mail is actually in," typically
+// one Sheets read total instead of one per company.
+//
+// Kept correct three ways, cheapest/most-common first:
+//  1. substituirEmpresa() is called after every write to a company's
+//     Usuários tab (actionUpdateValues_, actionCreateCompany_) — the index
+//     entry is only ever as stale as the time between a Usuários edit and
+//     the next login, not between logins.
+//  2. actionMe_/autorizadoEmAlgumaEmpresa_ NEVER trust the index blindly for
+//     who gets access — they only use it to narrow which companies' real
+//     Usuários tab to read (getAccess_/loadUsuarios_, both live). A stale or
+//     missing index entry can only make a login slower (falls back to
+//     scanning every company), never grant access it shouldn't.
+//  3. A daily trigger (reconstruirIndiceEmailsAgendado, below) rebuilds the
+//     whole index from the real Usuários tabs — a safety net for the one
+//     case the write-hook above can't catch: someone editing a Usuários tab
+//     directly in Google Sheets, bypassing this app entirely.
+//
+// Deploy safety: the index starts EMPTY on a fresh deploy (no backfill
+// needed before going live). actionMe_ falls back to the old full-company
+// scan whenever the index has nothing for an e-mail yet, and — the important
+// part — that fallback scan opportunistically indexes whatever it finds, so
+// only a person's FIRST login after this ships pays the old cost; every
+// login after that is fast, with no manual migration step required (running
+// instalarGatilhoIndiceEmails once is still worth doing, for the drift
+// safety net in point 3, but nothing breaks before that happens).
+// ---------------------------------------------------------------------------
+
+const INDICE_EMAILS_TAB = "ÍndiceEmails";
+const INDICE_EMAILS_HEADERS = ["E-mail", "ID da planilha"];
+
+function indiceEmailsDeps_(cache) {
+  const props = PropertiesService.getScriptProperties();
+
+  function planilha_() {
+    let id = props.getProperty(REGISTRY_PROP);
+    if (!id) {
+      const criada = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
+      id = criada.spreadsheetId;
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      props.setProperty(REGISTRY_PROP, id);
+    }
+    const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
+    if (titulos.indexOf(INDICE_EMAILS_TAB) === -1) {
+      Sheets.Spreadsheets.batchUpdate({ requests: [{ addSheet: { properties: { title: INDICE_EMAILS_TAB } } }] }, id);
+      Sheets.Spreadsheets.Values.update({ values: [INDICE_EMAILS_HEADERS] }, id, INDICE_EMAILS_TAB + "!A1:B1", { valueInputOption: "RAW" });
+    }
+    return id;
+  }
+
+  function lerTudoCru_() {
+    if (!props.getProperty(REGISTRY_PROP)) return [];
+    return Sheets.Spreadsheets.Values.get(planilha_(), INDICE_EMAILS_TAB + "!A2:B", { valueRenderOption: "UNFORMATTED_VALUE" }).values || [];
+  }
+
+  function lerTudo_() {
+    const guardado = cache.get("idxe_tudo");
+    if (guardado) return JSON.parse(guardado);
+    const linhas = lerTudoCru_()
+      .map((linha) => ({ email: String(linha[0] || ""), spreadsheetId: String(linha[1] || "") }))
+      .filter((l) => l.email && l.spreadsheetId);
+    cache.put("idxe_tudo", JSON.stringify(linhas), 20);
+    return linhas;
+  }
+
+  return {
+    listarEmpresasDoEmail: (canon) => lerTudo_().filter((l) => l.email === canon).map((l) => l.spreadsheetId),
+    // Narrow, additive write for the self-healing fallback path in actionMe_
+    // — adds one membership if it is not already there. Never removes
+    // anything, so it can never be the reason a real membership disappears.
+    adicionar: (canon, spreadsheetId) => {
+      const id = planilha_();
+      const existentes = lerTudoCru_();
+      const jaTem = existentes.some((linha) => String(linha[0] || "") === canon && String(linha[1] || "") === spreadsheetId);
+      if (jaTem) return;
+      const proxima = existentes.length + 2;
+      Sheets.Spreadsheets.Values.update({ values: [[canon, spreadsheetId]] }, id, INDICE_EMAILS_TAB + "!A" + proxima + ":B" + proxima, { valueInputOption: "RAW" });
+      cache.remove("idxe_tudo");
+    },
+    // The authoritative sync, called after every real Usuários write: throws
+    // away every existing index row for this ONE company and replaces it
+    // with its current real membership. Simpler and safer than trying to
+    // patch a single row from a write's old/new values (a removal's write
+    // only carries blanks, never the e-mail that used to be there).
+    substituirEmpresa: (spreadsheetId, emails) => {
+      const id = planilha_();
+      const existentes = lerTudoCru_();
+      const deOutrasEmpresas = existentes
+        .filter((linha) => String(linha[1] || "") !== spreadsheetId)
+        .map((linha) => [String(linha[0] || ""), String(linha[1] || "")]);
+      const novasLinhas = deOutrasEmpresas.concat(emails.map((e) => [e, spreadsheetId]));
+      if (existentes.length) Sheets.Spreadsheets.Values.clear({}, id, INDICE_EMAILS_TAB + "!A2:B" + (existentes.length + 1));
+      if (novasLinhas.length) {
+        Sheets.Spreadsheets.Values.update({ values: novasLinhas }, id, INDICE_EMAILS_TAB + "!A2:B" + (novasLinhas.length + 1), { valueInputOption: "RAW" });
+      }
+      cache.remove("idxe_tudo");
+    },
+  };
+}
+
+// Re-reads one company's real Usuários tab and makes the index match it
+// exactly. Called right after every write to that tab (add/edit/remove a
+// person, or the very first bootstrap row) — deps.cache.remove("usr_"+id)
+// must already have run before this, so loadUsuarios_ here sees the fresh
+// data, not the 20 s cache of the pre-write state.
+function reindexarEmpresaUsuarios_(deps, spreadsheetId) {
+  if (!deps.indiceEmails) return;
+  let usuarios;
+  try {
+    usuarios = loadUsuarios_(deps, spreadsheetId);
+  } catch (err) {
+    return; // tab unreadable right now — the daily reconciliation will catch it
+  }
+  deps.indiceEmails.substituirEmpresa(spreadsheetId, (usuarios || []).map((u) => u.chave));
+}
+
+// ---------------------------------------------------------------------------
+// Daily reconciliation trigger — the drift safety net described above, same
+// manual-one-time-install pattern as instalarGatilhoLembretes/
+// instalarGatilhoCotaDeEmail (open the Apps Script editor, select
+// instalarGatilhoIndiceEmails, press Run, authorize if asked; idempotent, so
+// re-running after a redeploy is harmless but still a step done by hand).
+// ---------------------------------------------------------------------------
+
+function reconstruirIndiceEmailsTodasEmpresas_(deps) {
+  const empresas = companyMap_(deps);
+  let falhas = 0;
+  Object.keys(empresas).forEach((spreadsheetId) => {
+    try {
+      reindexarEmpresaUsuarios_(deps, spreadsheetId);
+    } catch (err) {
+      falhas += 1;
+      console.error("Índice de e-mails — falhou para " + empresas[spreadsheetId].empresa + ": " + err.message);
+    }
+  });
+  return { empresas: Object.keys(empresas).length, falhas: falhas };
+}
+
+function reconstruirIndiceEmailsAgendado() {
+  const deps = realDeps_();
+  const resultado = reconstruirIndiceEmailsTodasEmpresas_(deps);
+  console.log("Índice de e-mails reconstruído: " + resultado.empresas + " empresa(s), " + resultado.falhas + " falha(s).");
+}
+
+function instalarGatilhoIndiceEmails() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "reconstruirIndiceEmailsAgendado") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("reconstruirIndiceEmailsAgendado").timeBased().everyDays(1).atHour(5).create();
+  console.log("Gatilho diário instalado: reconstruirIndiceEmailsAgendado, por volta das 5h.");
 }
 
 // ---- sending: Firebase Cloud Messaging (push) and WhatsApp (Meta Cloud API) ----
