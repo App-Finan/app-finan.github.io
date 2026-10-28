@@ -1659,6 +1659,80 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
   }
 })();
 
+// --- backup semanal (2026-10-28, "SaaS Fase 5" — ver CLAUDE.md "Backup
+// simples"). deps.backupEmail/deps.drive são lidos diretamente de deps (não
+// de PropertiesService/DriveApp reais), mesmo padrão config-gated de
+// deps.recaptcha — o teste simula "configurado"/"não configurado" sem tocar
+// em nada real.
+(function () {
+  function backupDeps(state) {
+    state.__drive = state.__drive || {};
+    const deps = makeDeps(state);
+    deps.backupEmail = state.__backupEmail || "";
+    deps.drive = {
+      exportarXlsx: (spreadsheetId) => {
+        if (state.__driveFalha === spreadsheetId) throw new Error("Drive indisponível");
+        const anexo = { tipo: "xlsx-fake", spreadsheetId: spreadsheetId };
+        state.__drive[spreadsheetId] = anexo;
+        return anexo;
+      },
+    };
+    return deps;
+  }
+  const T = (cond, name) => results.push((cond ? "PASS " : "FAIL ") + name);
+
+  // not configured: a silent no-op, same as every other config-gated feature here
+  {
+    const state = freshState();
+    const r = executarBackupSemanal_(backupDeps(state));
+    T(r.configurado === false && r.enviados === 0, "backup: sem BACKUP_EMAIL configurado, não faz nada");
+    T(state.__mail.length === 0, "…nenhum e-mail é enviado");
+  }
+
+  // configured: one e-mail per known ACTIVE company, each with the right
+  // attachment and recipient
+  {
+    const state = freshState();
+    state.__backupEmail = "dono-pessoal@x.com";
+    const r = executarBackupSemanal_(backupDeps(state));
+    T(r.configurado === true && r.enviados === 2 && r.falhas === 0, "backup: uma empresa configurada envia um e-mail por empresa conhecida (Ipanema + Carolina)");
+    T(state.__mail.every((m) => m.to === "dono-pessoal@x.com"), "…todos endereçados ao BACKUP_EMAIL configurado, nunca à conta do sistema");
+    T(state.__mail.every((m) => Array.isArray(m.attachments) && m.attachments.length === 1), "…cada e-mail carrega exatamente um anexo");
+    T(state.__mail.some((m) => /Ipanema Joias/.test(m.subject)) && state.__mail.some((m) => /Carolina Joias/.test(m.subject)), "…o assunto identifica de qual empresa é a cópia");
+  }
+
+  // a company deactivated (trial expirado / excluída) stops being backed up —
+  // same companyMap_ source every other daily/weekly job in this file uses
+  {
+    const state = freshState();
+    state.__backupEmail = "dono-pessoal@x.com";
+    state.__registry.push({ spreadsheetId: "DESATIVADA", empresa: "Empresa Desativada", sheetName: "Lançamento", segmento: "outro", ativa: false });
+    const r = executarBackupSemanal_(backupDeps(state));
+    T(r.enviados === 2 && !state.__mail.some((m) => /Desativada/.test(m.subject)), "backup: uma empresa desativada não entra na cópia semanal");
+  }
+
+  // one company's export failing does not stop the others — same resilience
+  // pattern as every other per-company daily job (lembretes, trials, índice)
+  {
+    const state = freshState();
+    state.__backupEmail = "dono-pessoal@x.com";
+    state.__driveFalha = IPA;
+    const r = executarBackupSemanal_(backupDeps(state));
+    T(r.falhas === 1 && r.enviados === 1, "backup: uma falha ao exportar uma empresa não impede as outras de serem copiadas");
+    T(!state.__mail.some((m) => /Ipanema Joias/.test(m.subject)) && state.__mail.some((m) => /Carolina Joias/.test(m.subject)), "…a que falhou simplesmente não manda e-mail, a outra manda normalmente");
+  }
+
+  // attachments are forwarded through deps.mail.send, never dropped — a
+  // regression here would silently ship backup e-mails with no file attached
+  {
+    const state = freshState();
+    state.__backupEmail = "dono-pessoal@x.com";
+    executarBackupSemanal_(backupDeps(state));
+    const anexoIpa = state.__mail.filter((m) => /Ipanema Joias/.test(m.subject))[0].attachments[0];
+    T(anexoIpa && anexoIpa.spreadsheetId === IPA, "backup: o anexo de cada e-mail corresponde à planilha certa, não embaralhado entre empresas");
+  }
+})();
+
 const failed = results.filter((r) => r.indexOf("FAIL") === 0);
 document.getElementById("out").textContent = results.join("\n") + "\n\nTOTAL " + results.length + "  FAILED " + failed.length;
 </script></body></html>

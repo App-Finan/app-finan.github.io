@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-28-cadastro-self-service";
+const GATEWAY_VERSION = "2026-10-28-backup-semanal";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -336,7 +336,21 @@ function realDeps_() {
     randomHex: randomHex_,
     mail: {
       // Plain text only, addressed to fixed recipients or to the requester.
-      send: (msg) => MailApp.sendEmail({ to: msg.to, subject: msg.subject, body: msg.body, name: "Finan." }),
+      // attachments is optional (only the backup feature, below, uses it) —
+      // every existing call site never passes it, so this stays a no-op
+      // addition for them.
+      send: (msg) =>
+        MailApp.sendEmail(
+          Object.assign({ to: msg.to, subject: msg.subject, body: msg.body, name: "Finan." }, msg.attachments ? { attachments: msg.attachments } : {})
+        ),
+    },
+    // Weekly off-account backup (2026-10-28) reads this directly rather than
+    // PropertiesService itself, so the test suite can simulate "configured"/
+    // "not configured" without touching real script properties — same
+    // config-gated pattern as deps.recaptcha above.
+    backupEmail: PropertiesService.getScriptProperties().getProperty("BACKUP_EMAIL") || "",
+    drive: {
+      exportarXlsx: (spreadsheetId) => DriveApp.getFileById(spreadsheetId).getAs(MimeType.MICROSOFT_EXCEL),
     },
     sheets: {
       // Creates the spreadsheet (owned by whoever deployed this script) with
@@ -2336,6 +2350,79 @@ function instalarGatilhoTrials() {
   });
   ScriptApp.newTrigger("verificarTrialsTodasEmpresasAgendado").timeBased().everyDays(1).atHour(8).create();
   console.log("Gatilho diário instalado: verificarTrialsTodasEmpresasAgendado, por volta das 8h.");
+}
+
+// ---------------------------------------------------------------------------
+// Backup simples (2026-10-28, "SaaS Fase 5" — o meio-termo decidido com o
+// usuário: nem aceitar o risco de custódia única sem nada, nem um sistema
+// completo de disaster recovery com restauração testada; ver CLAUDE.md
+// "Risco de custódia"). Uma vez por semana, exporta cada planilha de empresa
+// como .xlsx e manda por e-mail para um endereço FORA da conta que guarda os
+// dados — se a conta do sistema (hoje finanponto@gmail.com, futuramente a
+// conta Workspace) for perdida, suspensa ou comprometida, ainda existe uma
+// cópia recente numa caixa de entrada independente dela.
+//
+// ⚠️ Isso NÃO é um sistema de restauração testado — é a proteção mais básica
+// contra o pior cenário, exatamente o "meio-termo" escolhido. Restaurar a
+// partir de um desses anexos hoje seria um processo manual (abrir o .xlsx,
+// recriar a planilha, ajustar o roteamento), não automatizado.
+// ⚠️ Consome a MESMA cota de e-mail compartilhada que todo o resto do
+// sistema usa (ver "Aviso de cota de e-mail quase esgotada" acima) — por
+// isso é semanal, não diário, e um e-mail por empresa, nunca um só grande
+// com vários anexos.
+// ⚠️ BACKUP_EMAIL precisa ser uma conta separada e seguramente controlada
+// pelo dono do sistema: os anexos contêm os dados financeiros completos de
+// CADA empresa, então essa caixa de entrada vira, na prática, mais um lugar
+// que guarda esses dados — escolher esse endereço é uma decisão de
+// segurança, não só operacional.
+// ⚠️ Só empresas ATIVAS são copiadas (mesma fonte, companyMap_, de todo
+// outro job diário/semanal deste arquivo) — uma empresa com o trial
+// vencido ou excluída para de ser incluída no backup a partir daí, mesmo
+// que os dados dela continuem existindo normalmente na própria planilha.
+// ---------------------------------------------------------------------------
+
+function executarBackupSemanal_(deps) {
+  if (!deps.backupEmail) return { enviados: 0, falhas: 0, configurado: false };
+  const empresas = companyMap_(deps);
+  let enviados = 0;
+  let falhas = 0;
+  Object.keys(empresas).forEach((spreadsheetId) => {
+    try {
+      const anexo = deps.drive.exportarXlsx(spreadsheetId);
+      const hoje = new Date(deps.now()).toISOString().slice(0, 10);
+      deps.mail.send({
+        to: deps.backupEmail,
+        subject: "Finan. — backup semanal: " + empresas[spreadsheetId].empresa,
+        body:
+          "Cópia semanal da planilha de \"" + empresas[spreadsheetId].empresa + "\" (" + hoje + "), em anexo.\n\n" +
+          "Este é um backup simples, não um sistema de restauração automática — guarde este e-mail em lugar seguro.\n",
+        attachments: [anexo],
+      });
+      enviados += 1;
+    } catch (err) {
+      falhas += 1;
+      console.error("Backup — falhou para " + (empresas[spreadsheetId] && empresas[spreadsheetId].empresa) + ": " + err.message);
+    }
+  });
+  return { enviados: enviados, falhas: falhas, configurado: true };
+}
+
+function executarBackupSemanalAgendado() {
+  const deps = realDeps_();
+  const resultado = executarBackupSemanal_(deps);
+  if (!resultado.configurado) {
+    console.log("Backup semanal: BACKUP_EMAIL não configurado em Propriedades do script — nada foi enviado.");
+    return;
+  }
+  console.log("Backup semanal: " + resultado.enviados + " enviado(s), " + resultado.falhas + " falha(s).");
+}
+
+function instalarGatilhoBackup() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "executarBackupSemanalAgendado") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("executarBackupSemanalAgendado").timeBased().everyWeeks(1).onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  console.log("Gatilho semanal instalado: executarBackupSemanalAgendado, aos domingos por volta das 3h.");
 }
 
 function acaoPwEsqueci_(deps, body) {
