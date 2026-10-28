@@ -28,11 +28,17 @@ function makeDeps(state) {
     registry: {
       list: () => state.__registry.filter((e) => e.ativa !== false).map((e) => Object.assign({}, e)),
       listAll: () => state.__registry.map((e) => Object.assign({}, e)),
-      add: (e) => { state.__registry.push({ spreadsheetId: e.spreadsheetId, empresa: e.empresa, sheetName: "Lançamento", segmento: e.segmento, ativa: true }); },
+      add: (e) => { state.__registry.push({ spreadsheetId: e.spreadsheetId, empresa: e.empresa, sheetName: "Lançamento", segmento: e.segmento, ativa: true, testeExpiraEm: e.testeExpiraEm || null, avisoTesteEm: null }); },
       setActive: (spreadsheetId, ativa) => {
         const e = state.__registry.filter((x) => x.spreadsheetId === spreadsheetId)[0];
         if (!e) return false;
         e.ativa = ativa;
+        return true;
+      },
+      marcarAvisoTeste: (spreadsheetId, serial) => {
+        const e = state.__registry.filter((x) => x.spreadsheetId === spreadsheetId)[0];
+        if (!e) return false;
+        e.avisoTesteEm = serial;
         return true;
       },
     },
@@ -900,7 +906,7 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   // the Google path is untouched
   T(w.chama({ token: "mas", action: "me" }).ok && w.chama({ token: "zzz", action: "me" }).status === 401, "Google sign-in still works exactly as before, and bad Google tokens are still refused");
   // secrets are created once and only in private properties (real dependency shape)
-  T(typeof secretsDeps_ === "function" && typeof loginsDeps_ === "function" && PW_PUBLIC_ACTIONS.length === 6, "the real dependencies exist (script properties + registry sheet)");
+  T(typeof secretsDeps_ === "function" && typeof loginsDeps_ === "function" && PW_PUBLIC_ACTIONS.length === 8, "the real dependencies exist (script properties + registry sheet)");
 })();
 
 // --- access requests (anyone signed in with Google may ask; only the admin sees/answers)
@@ -1437,6 +1443,219 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
     T(autorizadoEmAlgumaEmpresa_(deps, "viz@x.com") === true, "…same true answer once the index already has the real entry");
     state.__indice.push({ email: "ninguem@x.com", spreadsheetId: EMP3 }); // stale: not really in EMP3's Usuários
     T(autorizadoEmAlgumaEmpresa_(deps, "ninguem@x.com") === false, "…and a stale index entry still can't produce a false yes — the live read of EMP3 says no");
+  }
+})();
+
+// --- self-service company signup + trial expiry (2026-10-28, "SaaS Fase 2"
+// — see CLAUDE.md "Cadastro self-service"). makeDeps (the shared base mock)
+// has no secrets/randomHex of its own — the same reason the password-login
+// tests build their own mundo() on top of it — so this block does the same,
+// its own small wrapper, scoped to just this block (mundo() itself is
+// scoped to its own IIFE and not reachable here).
+(function () {
+  function signupDeps(state) {
+    state.__cacheMap = state.__cacheMap || {};
+    if (state.__agora === undefined) state.__agora = 1000000000000;
+    const deps = makeDeps(state);
+    deps.now = () => state.__agora;
+    deps.secrets = { get: () => ({ pepper: "p".repeat(64), sessionKey: "s".repeat(64) }) };
+    let contador = 0;
+    deps.randomHex = (n) => hmacSha256Hex_("rnd-signup", state.__agora + "-" + (++contador)).repeat(2).slice(0, n * 2);
+    deps.cache = {
+      get: (k) => { const e = state.__cacheMap[k]; return e && e.ate > state.__agora ? e.v : null; },
+      put: (k, v, s) => { state.__cacheMap[k] = { v: String(v), ate: state.__agora + s * 1000 }; },
+      remove: (k) => { delete state.__cacheMap[k]; },
+    };
+    deps.indiceEmails = {
+      listarEmpresasDoEmail: (canon) => state.__indice.filter((l) => l.email === canon).map((l) => l.spreadsheetId),
+      adicionar: (canon, spreadsheetId) => {
+        if (!state.__indice.some((l) => l.email === canon && l.spreadsheetId === spreadsheetId)) state.__indice.push({ email: canon, spreadsheetId: spreadsheetId });
+      },
+      substituirEmpresa: (spreadsheetId, emails) => {
+        state.__indice = state.__indice.filter((l) => l.spreadsheetId !== spreadsheetId).concat(emails.map((e) => ({ email: e, spreadsheetId: spreadsheetId })));
+      },
+    };
+    return deps;
+  }
+  function estado() {
+    const s = freshState();
+    s.__cacheMap = {};
+    s.__indice = [];
+    s.__agora = 1000000000000; // set up-front: helpers like empresaTrial() compute dates from this before signupDeps() ever runs
+    return s;
+  }
+  function chamar(state, corpo) {
+    try { return { ok: true, data: handleRequest(corpo, signupDeps(state)) }; }
+    catch (e) { return { ok: false, status: e.status, msg: e.message }; }
+  }
+  function ultimoCodigo(state, para) {
+    const m = state.__mail.filter((x) => x.to === para).pop();
+    const r = m && /: (\d{6})\b/.exec(m.body);
+    return r ? r[1] : null;
+  }
+  function pedir(state, email, nomeEmpresa, extra) {
+    return chamar(state, Object.assign({ action: "signupRequestCode", email: email, nomeEmpresa: nomeEmpresa, nomeResponsavel: "Dona Empresa" }, extra || {}));
+  }
+  function confirmarComCodigoCerto(state, email) {
+    return chamar(state, { action: "signupConfirmar", email: email, codigo: ultimoCodigo(state, email) });
+  }
+  const T = (cond, name) => results.push((cond ? "PASS " : "FAIL ") + name);
+
+  // A: happy path — request, confirm, company created with a 14-day trial, founder indexed
+  {
+    const state = estado();
+    const r1 = pedir(state, "dona@x.com", "Empresa Nova");
+    T(r1.ok && r1.data.enviado === true, "signup: request step sends a code and nothing is created yet");
+    T(Object.keys(state).filter((k) => k.indexOf("NEW") === 0).length === 0, "…no company spreadsheet exists until the code is confirmed");
+    const r2 = confirmarComCodigoCerto(state, "dona@x.com");
+    T(r2.ok && r2.data.spreadsheetId && r2.data.empresa === "Empresa Nova", "…confirming the right code creates the company");
+    const linhaUsuarios = state[r2.data.spreadsheetId]["Usuários"][1];
+    T(linhaUsuarios[0] === "dona@x.com" && linhaUsuarios[2] === ROLE_MASTER, "…the requester becomes the founding Master");
+    const registro = state.__registry.filter((e) => e.spreadsheetId === r2.data.spreadsheetId)[0];
+    T(registro && registro.testeExpiraEm === hojeSerial_({ now: () => state.__agora }) + SIGNUP_TRIAL_DIAS, "…a 14-day trial is recorded in the registry");
+    T(state.__indice.some((l) => l.email === "dona@x.com" && l.spreadsheetId === r2.data.spreadsheetId), "…and the founding Master is indexed immediately (reuses reindexarEmpresaUsuarios_)");
+  }
+
+  // wrong code / expired code / too many tries
+  {
+    const state = estado();
+    pedir(state, "x@x.com", "Empresa B");
+    const certo = ultimoCodigo(state, "x@x.com");
+    const errado = certo === "000000" ? "111111" : "000000";
+    T(chamar(state, { action: "signupConfirmar", email: "x@x.com", codigo: errado }).status === 400, "signup: a wrong code is refused");
+    T(!state.__registry.length, "…and nothing gets created");
+  }
+  {
+    const state = estado();
+    pedir(state, "y@x.com", "Empresa C");
+    state.__agora += 16 * 60000; // past the 15-minute window
+    T(confirmarComCodigoCerto(state, "y@x.com").status === 400, "signup: an expired code (15 min) is refused");
+  }
+  {
+    const state = estado();
+    pedir(state, "z@x.com", "Empresa D");
+    const certo = ultimoCodigo(state, "z@x.com");
+    const errado = certo === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 5; i += 1) chamar(state, { action: "signupConfirmar", email: "z@x.com", codigo: errado });
+    T(chamar(state, { action: "signupConfirmar", email: "z@x.com", codigo: certo }).status === 400, "signup: after 5 wrong tries even the right code is void");
+  }
+
+  // duplicate company name — at request time, and the race where it becomes
+  // taken between someone's request and their confirm.
+  {
+    const state = estado();
+    pedir(state, "a@x.com", "Empresa Igual");
+    confirmarComCodigoCerto(state, "a@x.com");
+    T(pedir(state, "b@x.com", "Empresa Igual").status === 400, "signup: a company name already taken is refused at the request step");
+    T(pedir(state, "c@x.com", "ipanema joias").status === 400, "…matches case-insensitively, including the two fixed companies");
+  }
+  {
+    const state = estado();
+    pedir(state, "um@x.com", "Empresa Corrida"); // both request BEFORE either confirms
+    pedir(state, "dois@x.com", "Empresa Corrida");
+    T(confirmarComCodigoCerto(state, "um@x.com").ok, "signup race: the first to confirm wins and creates the company");
+    T(confirmarComCodigoCerto(state, "dois@x.com").status === 400, "…the second confirming the SAME name (taken in between) is refused, not silently duplicated");
+  }
+
+  // rate limiting on the request step (reuses limitarEmails_, same as every
+  // other public mail-sending action) — a regression here would mean someone
+  // forgot to call it on this new action specifically.
+  {
+    const state = estado();
+    pedir(state, "rep@x.com", "Empresa Um");
+    T(pedir(state, "rep@x.com", "Empresa Dois").status === 429, "signup: a second code request within a minute for the same e-mail is refused");
+  }
+
+  // basic field validation
+  {
+    const state = estado();
+    T(pedir(state, "nao-e-email", "Empresa").status === 400, "signup: an invalid e-mail is refused");
+    T(chamar(state, { action: "signupRequestCode", email: "ok@x.com", nomeEmpresa: "", nomeResponsavel: "Dona" }).status === 400, "…an empty company name is refused");
+    T(chamar(state, { action: "signupRequestCode", email: "ok@x.com", nomeEmpresa: "Empresa", nomeResponsavel: "" }).status === 400, "…an empty responsible-person name is refused");
+    T(chamar(state, { action: "signupRequestCode", email: "ok@x.com", nomeEmpresa: "Empresa", nomeResponsavel: "Dona", segmento: "nao-existe" }).status === 400, "…an unknown segment id is refused");
+  }
+
+  // reCAPTCHA: a pass-through when not configured (every test above already
+  // relies on this — asserted explicitly here too), and actually enforced
+  // when a deps.recaptcha IS present, same config-gated pattern as push/whatsapp.
+  {
+    const state = estado();
+    const deps = signupDeps(state);
+    deps.recaptcha = { verificar: () => false };
+    let erro = null;
+    try { handleRequest({ action: "signupRequestCode", email: "cap@x.com", nomeEmpresa: "Empresa Captcha", nomeResponsavel: "Dona", captchaToken: "qualquer" }, deps); } catch (e) { erro = e; }
+    T(erro instanceof GatewayError_ && erro.status === 400, "signup: a configured reCAPTCHA that rejects the token refuses the request");
+    const deps2 = signupDeps(state);
+    deps2.recaptcha = { verificar: (t) => t === "valido" };
+    const ok = (() => { try { handleRequest({ action: "signupRequestCode", email: "cap2@x.com", nomeEmpresa: "Empresa Captcha 2", nomeResponsavel: "Dona", captchaToken: "valido" }, deps2); return true; } catch (e) { return false; } })();
+    T(ok, "…and accepts it when the token is the right one");
+  }
+
+  // --- executarVerificacaoTrials_ (direct unit test, same pattern as
+  // executarVerificacaoLembretes_/verificarCotaDeEmail_ elsewhere in this file)
+  function empresaTrial(state, id, dias, overrides) {
+    state[id] = { "Lançamento": [[]], Usuários: [["Email", "Nome", "Perfil"], ["dono@x.com", "Dono", ROLE_MASTER]] };
+    const hoje = hojeSerial_({ now: () => state.__agora });
+    state.__registry.push(Object.assign({ spreadsheetId: id, empresa: "Empresa " + id, segmento: "outro", ativa: true, testeExpiraEm: hoje + dias, avisoTesteEm: null }, overrides || {}));
+  }
+
+  {
+    const state = estado();
+    empresaTrial(state, "VENCIDA", -1); // expired yesterday
+    const r = executarVerificacaoTrials_(signupDeps(state));
+    T(r.desativadas === 1, "trials: a company whose trial expired yesterday is deactivated");
+    T(state.__registry[0].ativa === false, "…its registry row is flipped inactive (the same mechanism Excluir empresa uses)");
+    T(state.__mail.some((m) => m.to === "dono@x.com" && /terminou/.test(m.subject)), "…and its Master is e-mailed that the trial ended");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "HOJE", 0); // expires today — still within the trial, not deactivated yet
+    const r = executarVerificacaoTrials_(signupDeps(state));
+    T(r.desativadas === 0 && state.__registry[0].ativa === true, "trials: the LAST day of the trial still has access (deactivation is the day AFTER expiry)");
+    T(state.__mail.some((m) => m.to === "dono@x.com" && /termina hoje/.test(m.subject)), "…but the \"last day\" reminder IS sent");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "TRESDIAS", SIGNUP_AVISO_DIAS_ANTES);
+    executarVerificacaoTrials_(signupDeps(state));
+    T(state.__mail.some((m) => m.to === "dono@x.com" && /faltam 3 dias/.test(m.subject)), "trials: exactly 3 days out sends the \"3 dias\" reminder");
+    T(state.__registry[0].avisoTesteEm === hojeSerial_({ now: () => state.__agora }), "…and stamps today's date to dedupe");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "SOMENTE2", 2); // 2 days left — neither of the two decided reminder points
+    executarVerificacaoTrials_(signupDeps(state));
+    T(state.__mail.length === 0, "trials: a day that is NOT exactly 3-days-out or the last day gets no reminder at all (only the two decided points, not every day)");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "DEDUP", 0, { avisoTesteEm: null });
+    const deps = signupDeps(state);
+    executarVerificacaoTrials_(deps);
+    const enviadosAntes = state.__mail.length;
+    executarVerificacaoTrials_(deps); // same day, run again (two logins, or the trigger firing twice)
+    T(state.__mail.length === enviadosAntes, "trials: running the check again the same day never double-sends the reminder");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "ADMINCRIADA", -5, { testeExpiraEm: null }); // admin-created via Painel do sistema: no trial clock
+    const r = executarVerificacaoTrials_(signupDeps(state));
+    T(r.desativadas === 0 && r.avisadas === 0 && state.__registry[0].ativa === true, "trials: a company with no trial clock at all (admin-created) is never touched");
+  }
+  {
+    const state = estado();
+    empresaTrial(state, "JAFORA", -1, { ativa: false }); // already deactivated some other way
+    const r = executarVerificacaoTrials_(signupDeps(state));
+    T(r.desativadas === 0, "trials: an already-inactive company is skipped, not reprocessed");
+  }
+  {
+    const state = estado();
+    state["SEMMASTER"] = { "Lançamento": [[]], Usuários: [["Email", "Nome", "Perfil"]] }; // no one listed at all
+    const hoje = hojeSerial_({ now: () => state.__agora });
+    state.__registry.push({ spreadsheetId: "SEMMASTER", empresa: "Sem Master", segmento: "outro", ativa: true, testeExpiraEm: hoje - 1, avisoTesteEm: null });
+    let erro = null;
+    try { executarVerificacaoTrials_(signupDeps(state)); } catch (e) { erro = e; }
+    T(erro === null && state.__registry[0].ativa === false, "trials: a company with no Master listed still gets deactivated correctly, just with nobody to e-mail (no crash)");
   }
 })();
 

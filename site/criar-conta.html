@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#faf7f0">
+<title>Criar conta — Finan.</title>
+<meta name="description" content="Crie a sua empresa no Finan. e experimente grátis por 14 dias.">
+<link rel="icon" href="../icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap">
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#faf7f0;color:#0b1f3a;font-family:"Sora",system-ui,sans-serif;line-height:1.55;min-height:100vh}
+.topbar{max-width:1040px;margin:0 auto;padding:28px 24px;display:flex}
+.wordmark{font-weight:700;font-size:1.2rem;letter-spacing:-.01em;color:#0b1f3a;text-decoration:none}
+.wordmark .dot{color:#2563c9}
+.wrap{max-width:460px;margin:20px auto 80px;padding:0 24px}
+.card{background:#fff;border:1px solid #e3e6ec;border-radius:16px;padding:36px 32px}
+h1{font-size:1.5rem;letter-spacing:-.01em;margin:0 0 8px}
+.sub{color:#5b6577;font-size:.95rem;margin:0 0 28px}
+label{display:block;font-size:.85rem;font-weight:600;color:#334155;margin:0 0 6px}
+.campo{margin-bottom:18px}
+input,select{width:100%;padding:11px 13px;border:1px solid #e3e6ec;border-radius:9px;font-family:inherit;font-size:.95rem;color:#0b1f3a;background:#fff}
+input:focus,select:focus{outline:2px solid #2563c9;outline-offset:1px}
+.btn{width:100%;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;padding:13px 20px;font-weight:600;font-size:.95rem;border:none;cursor:pointer;background:#2563c9;color:#fff}
+.btn:hover{background:#1f54ab}
+.btn:disabled{opacity:.6;cursor:default}
+.erro{background:#fdecea;border:1px solid #f3c4bd;color:#9c2b1f;border-radius:9px;padding:10px 14px;font-size:.88rem;margin-bottom:18px}
+.voltar{display:inline-block;margin-top:16px;font-size:.88rem;color:#5b6577;text-decoration:none;cursor:pointer;background:none;border:none;padding:0}
+.voltar:hover{color:#2563c9}
+.codigo-info{font-size:.9rem;color:#5b6577;margin-bottom:20px}
+.sucesso-icone{width:52px;height:52px;border-radius:50%;background:rgba(30,142,90,.12);color:#1e8e5a;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:18px}
+.fineprint{font-size:.8rem;color:#8691a3;margin-top:18px;text-align:center}
+.fineprint a{color:#5b6577}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="wordmark" href="./">Finan<span class="dot">.</span></a>
+</header>
+
+<main class="wrap">
+  <div class="card">
+
+    <section id="passo-dados">
+      <h1>Crie a sua empresa</h1>
+      <p class="sub">14 dias grátis, sem cartão de crédito.</p>
+      <div id="erro-dados" class="erro" hidden></div>
+      <form id="form-dados">
+        <div class="campo">
+          <label for="campo-empresa">Nome da empresa</label>
+          <input type="text" id="campo-empresa" maxlength="80" required>
+        </div>
+        <div class="campo">
+          <label for="campo-segmento">Segmento</label>
+          <select id="campo-segmento">
+            <option value="joalheria">Joalheria</option>
+            <option value="petshop">Petshop</option>
+            <option value="comercio">Comércio em geral</option>
+            <option value="servicos">Serviços</option>
+            <option value="alimentacao">Alimentação</option>
+            <option value="saude">Saúde e bem-estar</option>
+            <option value="outro" selected>Outro segmento</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="campo-nome">Seu nome</label>
+          <input type="text" id="campo-nome" maxlength="80" required>
+        </div>
+        <div class="campo">
+          <label for="campo-email">Seu e-mail</label>
+          <input type="email" id="campo-email" maxlength="120" required>
+        </div>
+        <button type="submit" class="btn" id="btn-enviar-codigo">Enviar código de confirmação</button>
+      </form>
+      <p class="fineprint">Ao continuar, você concorda com os <a href="../termos.html">Termos de Serviço</a> e a <a href="../privacidade.html">Política de Privacidade</a>.</p>
+    </section>
+
+    <section id="passo-codigo" hidden>
+      <h1>Confirme o seu e-mail</h1>
+      <p class="codigo-info" id="codigo-info"></p>
+      <div id="erro-codigo" class="erro" hidden></div>
+      <form id="form-codigo">
+        <div class="campo">
+          <label for="campo-codigo">Código de 6 dígitos</label>
+          <input type="text" id="campo-codigo" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required>
+        </div>
+        <button type="submit" class="btn" id="btn-confirmar">Confirmar e criar empresa</button>
+      </form>
+      <button type="button" class="voltar" id="btn-voltar">← Usar outro e-mail</button>
+    </section>
+
+    <section id="passo-pronto" hidden>
+      <div class="sucesso-icone">✓</div>
+      <h1 id="pronto-titulo">Empresa criada!</h1>
+      <p class="sub" id="pronto-sub">Você tem 14 dias grátis para testar o Finan.</p>
+      <a class="btn" href="../index.html" style="text-decoration:none">Entrar agora</a>
+    </section>
+
+  </div>
+</main>
+
+<script src="../js/config.js"></script>
+<script>
+// Sem biblioteca: as duas ações (signupRequestCode/signupConfirmar) já
+// existem no gateway (ver apps-script/Code.gs e CLAUDE.md "Cadastro
+// self-service"). Este arquivo é autocontido de propósito — não carrega o
+// resto do app, só fala com o mesmo CONFIG.GATEWAY_URL que ele usa.
+
+// reCAPTCHA: vazio até existir uma chave real (Script Property
+// RECAPTCHA_SITE_KEY no servidor tem a contraparte secreta) — com isso em
+// branco, o formulário funciona normalmente, só sem a camada de robô; ver a
+// nota em verificarCaptcha_ no Code.gs.
+const RECAPTCHA_SITE_KEY = "";
+
+let emailPendente = "";
+
+function mostrarPasso(id) {
+  ["passo-dados", "passo-codigo", "passo-pronto"].forEach((p) => {
+    document.getElementById(p).hidden = p !== id;
+  });
+}
+
+function mostrarErro(elId, mensagem) {
+  const el = document.getElementById(elId);
+  el.textContent = mensagem;
+  el.hidden = false;
+}
+
+function esconderErro(elId) {
+  document.getElementById(elId).hidden = true;
+}
+
+async function chamarGateway(action, params) {
+  const response = await fetch(CONFIG.GATEWAY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(Object.assign({ action: action, token: "" }, params)),
+  });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (err) {
+    throw new Error("Resposta inválida do servidor. Tente novamente em instantes.");
+  }
+  if (!payload || payload.ok !== true) {
+    throw new Error((payload && payload.error) || "Erro no servidor. Tente novamente.");
+  }
+  return payload.data;
+}
+
+document.getElementById("form-dados").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  esconderErro("erro-dados");
+  const nomeEmpresa = document.getElementById("campo-empresa").value.trim();
+  const segmento = document.getElementById("campo-segmento").value;
+  const nomeResponsavel = document.getElementById("campo-nome").value.trim();
+  const email = document.getElementById("campo-email").value.trim();
+  const botao = document.getElementById("btn-enviar-codigo");
+  botao.disabled = true;
+  botao.textContent = "Enviando...";
+  try {
+    const captchaToken = window.grecaptcha && RECAPTCHA_SITE_KEY ? await grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: "signup" }) : "";
+    await chamarGateway("signupRequestCode", { nomeEmpresa: nomeEmpresa, segmento: segmento, nomeResponsavel: nomeResponsavel, email: email, captchaToken: captchaToken });
+    emailPendente = email;
+    const info = document.getElementById("codigo-info");
+    info.textContent = "";
+    info.appendChild(document.createTextNode("Enviamos um código de 6 dígitos para "));
+    const forte = document.createElement("strong");
+    forte.textContent = email;
+    info.appendChild(forte);
+    info.appendChild(document.createTextNode("."));
+    mostrarPasso("passo-codigo");
+    document.getElementById("campo-codigo").focus();
+  } catch (err) {
+    mostrarErro("erro-dados", err.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Enviar código de confirmação";
+  }
+});
+
+document.getElementById("form-codigo").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  esconderErro("erro-codigo");
+  const codigo = document.getElementById("campo-codigo").value.trim();
+  const botao = document.getElementById("btn-confirmar");
+  botao.disabled = true;
+  botao.textContent = "Confirmando...";
+  try {
+    await chamarGateway("signupConfirmar", { email: emailPendente, codigo: codigo });
+    mostrarPasso("passo-pronto");
+  } catch (err) {
+    mostrarErro("erro-codigo", err.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Confirmar e criar empresa";
+  }
+});
+
+document.getElementById("btn-voltar").addEventListener("click", () => {
+  esconderErro("erro-codigo");
+  document.getElementById("campo-codigo").value = "";
+  mostrarPasso("passo-dados");
+});
+</script>
+</body>
+</html>

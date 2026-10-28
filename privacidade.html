@@ -3,70 +3,82 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#060504">
+<meta name="theme-color" content="#faf7f0">
 <title>Política de Privacidade — Finan.</title>
 <link rel="icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap">
 <style>
-:root{color-scheme:dark}
+:root{color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;background:#060504;color:#f4efe4;font-family:"Space Grotesk",system-ui,sans-serif;line-height:1.65}
+body{margin:0;background:#faf7f0;color:#0b1f3a;font-family:"Sora",system-ui,sans-serif;line-height:1.65}
 main{max-width:760px;margin:0 auto;padding:48px 24px 72px}
-.tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#e3b341}
-h1{font-size:2.2rem;letter-spacing:-.02em;margin:.5rem 0 .25rem}
-h2{font-size:1.15rem;margin:2.2rem 0 .5rem;color:#f4efe4}
-p,li{color:#c9bfa8}
+.wordmark{font-weight:700;font-size:1.05rem;letter-spacing:-.01em}
+.wordmark .dot{color:#2563c9}
+.tag{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#5b6577;font-weight:600}
+h1{font-size:2.1rem;letter-spacing:-.02em;margin:.5rem 0 .25rem}
+h2{font-size:1.1rem;margin:2.2rem 0 .5rem;color:#0b1f3a}
+p,li{color:#334155}
 ul{padding-left:1.2rem}
-a{color:#e3b341}
-.meta{color:#9b9078;font-size:.9rem}
-.back{display:inline-block;margin-bottom:2rem;font-size:.9rem}
-hr{border:none;border-top:1px dashed #2a2417;margin:2.5rem 0 1rem}
+a{color:#2563c9}
+.meta{color:#5b6577;font-size:.9rem}
+.back{display:inline-block;margin-bottom:2rem;font-size:.9rem;color:#5b6577;text-decoration:none}
+.back:hover{color:#2563c9}
+hr{border:none;border-top:1px solid #e3e6ec;margin:2.5rem 0 1rem}
+.aviso{background:#fff;border:1px solid #e3e6ec;border-radius:10px;padding:16px 18px;margin:1.5rem 0;font-size:.92rem;color:#5b6577}
 </style>
 </head>
 <body>
 <main>
-<a class="back" href="./">← Voltar ao Finan.</a>
-<div class="tag">[ privacidade ]</div>
+<a class="back" href="./">← Voltar ao <span class="wordmark">Finan<span class="dot">.</span></span></a>
+<div class="tag">Privacidade</div>
 <h1>Política de Privacidade</h1>
-<p class="meta">Última atualização: 19 de setembro de 2026</p>
+<p class="meta">Última atualização: 28 de outubro de 2026</p>
 
-<p>O Finan. (com versões por segmento, como FinanGold para joalherias) é um sistema de controle financeiro, estoque e equipe usado pela Ipanema Joias, pela Carolina Joias e por outras empresas cadastradas. Esta página explica, em linguagem simples, quais dados o app usa e como.</p>
+<p>O Finan. é um sistema de controle financeiro, estoque e equipe, oferecido como assinatura para empresas de diversos segmentos. Esta página explica, em linguagem simples, quais dados o app usa, como, e quais são os seus direitos sobre eles.</p>
 
 <h2>Quem usa e quem controla os dados</h2>
-<p>O app só funciona para pessoas cadastradas pelo administrador de cada empresa. Os dados financeiros e de estoque pertencem à empresa que os lançou e ficam nas planilhas Google dessa própria empresa. O Finan. não tem banco de dados próprio e não guarda cópia desses dados em servidores de terceiros.</p>
-<p>Cada empresa tem a sua própria planilha, separada das outras: as pessoas de uma empresa não veem os dados das demais. As planilhas ficam na conta Google do administrador do sistema, que as mantém em nome de cada empresa e só as acessa para dar suporte quando necessário.</p>
+<p>O app só funciona para pessoas cadastradas pelo administrador de cada empresa assinante. Os dados financeiros e de estoque pertencem à empresa que os lançou e ficam em planilhas Google próprias dessa empresa, separadas das demais — pessoas de uma empresa nunca veem os dados de outra.</p>
+<p>Nessa relação, a empresa assinante é a <strong>controladora</strong> dos dados que lança no sistema (inclusive dados de terceiros, como clientes e fornecedores, que aparecem em observações, nomes de lançamentos ou extratos importados) — ela decide o que é lançado e por quê. O Finan. atua como <strong>operador</strong>: trata esses dados só para fazer o sistema funcionar, nunca para finalidade própria.</p>
+<div class="aviso">As planilhas de todas as empresas assinantes ficam hoje sob a custódia de uma única conta Google administrada pelo Finan., que as mantém em nome de cada empresa e só as acessa para dar suporte quando necessário. Isso é dito aqui com todas as letras porque é uma decisão real de arquitetura, não um detalhe técnico menor — veja "Como protegemos esses dados" abaixo pelo que fazemos a respeito.</div>
 
 <h2>Que informações o app acessa</h2>
 <ul>
 <li><strong>Seu e-mail Google.</strong> Ao entrar com o Google, o app recebe apenas o seu endereço de e-mail, para saber quem você é e conferir se o administrador da empresa liberou o seu acesso. O app não recebe a sua senha, seus contatos, seus arquivos nem o seu Google Drive.</li>
-<li><strong>Login com e-mail e senha (opcional).</strong> Quem prefere não usar o Google pode criar um acesso com e-mail e senha. A sua senha <em>nunca é guardada</em>: o seu aparelho a transforma em uma impressão digital irreversível antes de enviar, e o servidor guarda apenas uma verificação dessa impressão (não há como recuperar a senha original, nem o administrador consegue vê-la). Guardamos também o e-mail, o nome, a data do cadastro e a situação do acesso (aguardando confirmação, aguardando aprovação, ativo ou bloqueado). O código de confirmação enviado por e-mail vale poucos minutos e também é guardado só de forma irreversível.</li>
-<li><strong>Nome e perfil de acesso</strong> (Visualizador, Editor ou Master), cadastrados pelo administrador da empresa na lista de usuários da planilha.</li>
-<li><strong>Pedidos de acesso.</strong> Se você entrar com uma conta que ainda não tem acesso e pedir liberação, guardamos o seu nome, o e-mail da conta Google, o nome da empresa e a mensagem que você escrever. O administrador do sistema recebe um aviso por e-mail e usa essas informações só para decidir o pedido e responder a você.</li>
-<li><strong>Dados da empresa</strong> (lançamentos de caixa, peças de estoque, listas de lojas, contas e pessoas), lidos e gravados na planilha da empresa conforme o seu perfil de acesso.</li>
+<li><strong>Login com e-mail e senha (opcional).</strong> Quem prefere não usar o Google pode criar um acesso com e-mail e senha. A sua senha <em>nunca é guardada</em>: o seu aparelho a transforma em uma impressão digital irreversível antes de enviar, e o servidor guarda apenas uma verificação dessa impressão — não há como recuperar a senha original, nem o administrador consegue vê-la.</li>
+<li><strong>Nome e perfil de acesso</strong> (Visualizador, Editor ou Master), cadastrados pelo administrador da empresa.</li>
+<li><strong>Pedidos de acesso e de nova assinatura.</strong> Se você pedir para usar o Finan. ou liberação de acesso a uma empresa existente, guardamos o seu nome, e-mail, empresa e a mensagem enviada, só para decidir o pedido e responder a você.</li>
+<li><strong>Dados de cobrança, quando a assinatura estiver ativa.</strong> O Finan. não processa nem guarda dados de cartão de crédito diretamente — a cobrança é feita por um prestador de pagamentos especializado, que recebe esses dados diretamente de você. O Finan. guarda apenas o necessário para saber se a assinatura da empresa está em dia (ex.: status do pagamento, data de renovação).</li>
+<li><strong>Dados da empresa</strong> (lançamentos de caixa, peças de estoque, extratos bancários importados, listas de lojas, contas e pessoas), lidos e gravados na planilha da empresa conforme o seu perfil de acesso.</li>
 </ul>
 
 <h2>Como os dados trafegam</h2>
-<p>O navegador conversa com um pequeno servidor da própria empresa, criado no Google Apps Script, que confere a sua identidade e a sua permissão antes de ler ou gravar qualquer dado na planilha. Tudo trafega por conexão segura (HTTPS).</p>
+<p>O navegador conversa com um servidor da própria aplicação, criado no Google Apps Script, que confere a sua identidade e a sua permissão antes de ler ou gravar qualquer dado na planilha. Tudo trafega por conexão segura (HTTPS).</p>
+
+<h2>Como protegemos esses dados</h2>
+<p>Cada empresa só é acessível por quem o seu próprio administrador cadastrou — essa verificação acontece a cada ação, não só no login. Além disso, mantemos cópias de segurança periódicas das planilhas, separadas da conta principal, para reduzir o risco de uma falha única afetar o acesso aos seus dados.</p>
 
 <h2>O que fica guardado no seu aparelho</h2>
 <ul>
-<li>Um código de sessão do Google, apenas enquanto a aba do navegador estiver aberta (dura cerca de 1 hora).</li>
-<li>Uma cópia dos últimos dados carregados, para o app continuar mostrando informações se a internet cair, e a fila de lançamentos feitos sem internet, que são enviados quando a conexão volta.</li>
+<li>Um código de sessão, apenas enquanto a aba do navegador estiver aberta (ou por mais tempo, só se você escolher "Manter conectado neste aparelho").</li>
+<li>Uma cópia dos últimos dados carregados, para o app continuar mostrando informações se a internet cair, e a fila de lançamentos feitos sem internet, enviados quando a conexão volta.</li>
 <li>Preferências simples, como a empresa e a tela em que você estava.</li>
 </ul>
 <p>Você pode apagar tudo isso limpando os dados do site no seu navegador.</p>
 
 <h2>O que o app não faz</h2>
 <ul>
-<li>Não usa cookies de publicidade, não faz análise de comportamento e não vende nem compartilha dados com terceiros.</li>
+<li>Não usa cookies de publicidade, não faz análise de comportamento de navegação e não vende dados a terceiros.</li>
 <li>As fontes de letras são carregadas do Google Fonts, então o Google pode registrar o endereço de IP dessa requisição.</li>
 </ul>
 
-<h2>Acesso, correção e remoção</h2>
-<p>O administrador da empresa pode ver, corrigir ou remover o seu cadastro a qualquer momento em Ajustes, o que encerra o seu acesso imediatamente. Para pedir uma correção ou a exclusão de dados que digam respeito a você, fale com o administrador da sua empresa ou use o contato abaixo.</p>
+<h2>Se você cancelar a assinatura</h2>
+<p>Você pode pedir a exportação dos dados da sua empresa antes de cancelar. Após o cancelamento, o acesso de todas as pessoas da empresa é encerrado; os dados ficam preservados por um período razoável para permitir uma eventual exportação tardia, e depois são removidos.</p>
+
+<h2>Seus direitos (LGPD)</h2>
+<p>Você pode pedir, a qualquer momento: confirmação de que tratamos os seus dados, acesso a eles, correção de dados incompletos ou desatualizados, e a exclusão de dados tratados com base no seu consentimento. Para dados lançados por uma empresa da qual você é cliente/fornecedor/contato, o pedido deve ser feito à empresa (controladora desses dados); para dados da sua própria conta de acesso ao Finan., você pode pedir diretamente a nós.</p>
 
 <h2>Mudanças nesta política</h2>
-<p>Se o app mudar a forma de tratar dados, esta página será atualizada e a data acima será alterada.</p>
+<p>Se o Finan. mudar a forma de tratar dados, esta página será atualizada e a data acima será alterada.</p>
 <hr>
 <p class="meta">Dúvidas ou pedidos sobre seus dados: <a href="mailto:finanponto@gmail.com">finanponto@gmail.com</a>.</p>
 </main>

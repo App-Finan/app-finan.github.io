@@ -42,7 +42,7 @@ const GATEWAY_CONFIG = {
 
 // Shown by the public banner (a GET on the /exec URL) so it is easy to confirm
 // which version of this file is really deployed.
-const GATEWAY_VERSION = "2026-10-28-indice-emails";
+const GATEWAY_VERSION = "2026-10-28-cadastro-self-service";
 
 const USUARIOS_TAB = "Usuários";
 // ERP, Fase 1 — Fornecedores (see CLAUDE.md "ERP: Fornecedores"). Deliberately
@@ -320,6 +320,11 @@ function realDeps_() {
     quotaEmail: quotaEmailDeps_(),
     pushTokens: pushTokensDeps_(cache),
     indiceEmails: indiceEmailsDeps_(cache),
+    // Config-gated, same no-op-until-configured pattern as push/whatsapp:
+    // null when RECAPTCHA_SECRET_KEY isn't set, so verificarCaptcha_ passes
+    // every signup through unchecked until it is (see that function's own
+    // comment for why this is safe to ship but not safe to publicize yet).
+    recaptcha: recaptchaSecreta_() ? { verificar: (token) => verificarCaptchaReal_(token, recaptchaSecreta_()) } : null,
     push: {
       enviar: (token, titulo, corpo) =>
         enviarPushFCM_({ cache: { get: (k) => cache.get(k), put: (k, v, s) => cache.put(k, v, s) }, now: () => Date.now() }, token, titulo, corpo, GATEWAY_CONFIG.APP_URL),
@@ -411,12 +416,16 @@ function registryDeps_(cache) {
     // real "Ativa" state) — used only by the system admin's company
     // management screen, never by companyMap_/routing, so a deactivated
     // company still shows up there (to be reactivated) but never becomes
-    // reachable again through the normal login/access path.
+    // reachable again through the normal login/access path. Also carries
+    // testeExpiraEm/avisoTesteEm (columns G/H, 2026-10-28 — see "Cadastro
+    // self-service" in CLAUDE.md): blank/undefined for a company created
+    // through the admin-only Painel do sistema path (no trial clock at all),
+    // a date serial for one created through self-service signup.
     listAll: () => {
       const id = props.getProperty(REGISTRY_PROP);
       const out = [];
       if (id) {
-        const data = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:F", { valueRenderOption: "UNFORMATTED_VALUE" });
+        const data = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:H", { valueRenderOption: "UNFORMATTED_VALUE" });
         (data.values || []).forEach((row) => {
           if (!row[0]) return;
           out.push({
@@ -424,6 +433,8 @@ function registryDeps_(cache) {
             empresa: String(row[1] || ""),
             segmento: segmentoValido_(String(row[5] || "")),
             ativa: String(row[4] || "Sim") !== "Não",
+            testeExpiraEm: typeof row[6] === "number" ? row[6] : null,
+            avisoTesteEm: typeof row[7] === "number" ? row[7] : null,
           });
         });
       }
@@ -453,20 +464,43 @@ function registryDeps_(cache) {
       }
       return false;
     },
+    // Dedupe stamp for the trial-ending reminder e-mails (2026-10-28) — same
+    // reasoning as Contas a Pagar/Receber's own "Avisado em" column: a sheet
+    // cell survives across logins/trigger runs, a cache key would not (and
+    // CacheService's own max TTL, 6h, is too short to mean "today" anyway).
+    marcarAvisoTeste: (spreadsheetId, serial) => {
+      const id = props.getProperty(REGISTRY_PROP);
+      if (!id) return false;
+      const data = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:A", { valueRenderOption: "UNFORMATTED_VALUE" });
+      const rows = data.values || [];
+      for (let i = 0; i < rows.length; i += 1) {
+        if (String(rows[i][0]) === spreadsheetId) {
+          const linha = i + 2;
+          Sheets.Spreadsheets.Values.update({ values: [[serial]] }, id, "Empresas!H" + linha + ":H" + linha, { valueInputOption: "RAW" });
+          cache.remove("reg_list");
+          return true;
+        }
+      }
+      return false;
+    },
+    // entry.testeExpiraEm is optional: omitted (or null/undefined) for a
+    // company created through the admin-only Painel do sistema path — no
+    // trial clock, matches today's behavior exactly; a date serial for one
+    // created through self-service signup (acaoSignupConfirmar_ below).
     add: (entry) => {
       let id = props.getProperty(REGISTRY_PROP);
       if (!id) {
         const created = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
         id = created.spreadsheetId;
-        Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+        Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento", "Teste expira em", "Aviso de teste enviado em"]] }, id, "Empresas!A1:H1", { valueInputOption: "RAW" });
         props.setProperty(REGISTRY_PROP, id);
       }
       const existing = Sheets.Spreadsheets.Values.get(id, "Empresas!A2:A");
       const next = (existing.values || []).length + 2;
       Sheets.Spreadsheets.Values.update(
-        { values: [[entry.spreadsheetId, entry.empresa, new Date().toISOString(), entry.criadaPor, "Sim", segmentoValido_(entry.segmento)]] },
+        { values: [[entry.spreadsheetId, entry.empresa, new Date().toISOString(), entry.criadaPor, "Sim", segmentoValido_(entry.segmento), entry.testeExpiraEm || "", ""]] },
         id,
-        "Empresas!A" + next + ":F" + next,
+        "Empresas!A" + next + ":H" + next,
         { valueInputOption: "RAW" }
       );
       cache.remove("reg_list");
@@ -485,7 +519,7 @@ function requestsDeps_() {
     if (!id) {
       const created = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
       id = created.spreadsheetId;
-      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento", "Teste expira em", "Aviso de teste enviado em"]] }, id, "Empresas!A1:H1", { valueInputOption: "RAW" });
       props.setProperty(REGISTRY_PROP, id);
     }
     const titles = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
@@ -1563,7 +1597,7 @@ const LOGINS_TAB = "Logins";
 const LOGIN_HEADERS = ["E-mail", "Nome", "Empresa", "Mensagem", "Situação", "Sal", "Verificador", "Versão", "Criado em", "Decidido em", "Código", "Código expira", "Tentativas do código", "Último acesso", "E-mail como digitado", "Login", "Função"];
 const LG = { EMAIL: 0, NOME: 1, EMPRESA: 2, MSG: 3, SIT: 4, SAL: 5, VER: 6, VERSAO: 7, CRIADO: 8, DECIDIDO: 9, CODIGO: 10, CODIGO_EXP: 11, CODIGO_TENT: 12, ULTIMO: 13, DIGITADO: 14, LOGIN: 15, FUNCAO: 16 };
 const SIT = { EMAIL: "Aguardando e-mail", APROVACAO: "Aguardando aprovação", ATIVO: "Ativo", RECUSADO: "Recusado", BLOQUEADO: "Bloqueado" };
-const PW_PUBLIC_ACTIONS = ["pwRegister", "pwConfirmar", "pwLogin", "pwEsqueci", "pwRedefinir", "pwBuscarEmailPorLogin"];
+const PW_PUBLIC_ACTIONS = ["pwRegister", "pwConfirmar", "pwLogin", "pwEsqueci", "pwRedefinir", "pwBuscarEmailPorLogin", "signupRequestCode", "signupConfirmar"];
 const PW_SESSION_MS = 12 * 60 * 60 * 1000;
 // "Manter conectado neste aparelho" (pwLogin's "lembrar" flag): a longer
 // session, kept in the browser's localStorage instead of sessionStorage (see
@@ -1732,7 +1766,7 @@ function loginsDeps_(cache) {
     if (!id) {
       const criada = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
       id = criada.spreadsheetId;
-      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento", "Teste expira em", "Aviso de teste enviado em"]] }, id, "Empresas!A1:H1", { valueInputOption: "RAW" });
       props.setProperty(REGISTRY_PROP, id);
     }
     const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
@@ -1918,6 +1952,8 @@ function despacharPublico_(body, deps) {
       case "pwLogin": return acaoPwLogin_(deps, body);
       case "pwEsqueci": return acaoPwEsqueci_(deps, body);
       case "pwBuscarEmailPorLogin": return acaoPwBuscarEmailPorLogin_(deps, body);
+      case "signupRequestCode": return acaoSignupRequestCode_(deps, body);
+      case "signupConfirmar": return acaoSignupConfirmar_(deps, body);
       default: return acaoPwRedefinir_(deps, body);
     }
   } catch (err) {
@@ -2073,6 +2109,233 @@ function acaoPwBuscarEmailPorLogin_(deps, body) {
   }
   deps.cache.remove(chaveFalhas);
   return { email: limparEmail_(encontrado.c[LG.DIGITADO]) };
+}
+
+// ---------------------------------------------------------------------------
+// Self-service company signup (2026-10-28, "SaaS Fase 2" — see CLAUDE.md).
+// Two-step public flow, same shape as pwRegister/pwConfirmar: a stranger
+// claims an e-mail, gets a 6-digit code, confirms it — and ONLY on
+// confirmation does the company actually get created, exactly mirroring the
+// password-login flow's "the code is the proof of ownership" reasoning. No
+// token/role check applies (anyone with a working e-mail may try this), so
+// everything here is about abuse resistance instead: reCAPTCHA (when
+// configured — see verificarCaptcha_ below), the same per-address cooldown/
+// window/global cap limitarEmails_ already enforces for every other public
+// mail-sending action, and a re-check of MAX_COMPANIES/duplicate-name right
+// before actually creating (time passes between the two steps).
+//
+// Every signup starts a 14-day trial (SIGNUP_TRIAL_DIAS) — see
+// executarVerificacaoTrials_ below for how that gets enforced and reminded
+// about. A company created through the ADMIN-ONLY actionCreateCompany_
+// (Painel do sistema) never gets a trial clock at all — that path is for the
+// system administrator onboarding someone directly, not a stranger
+// self-signing-up, so it keeps behaving exactly as it always has.
+// ---------------------------------------------------------------------------
+
+const SIGNUP_CODE_MS = 15 * 60 * 1000;
+const SIGNUP_MAX_TENTATIVAS = 5;
+const SIGNUP_TRIAL_DIAS = 14;
+const SIGNUP_AVISO_DIAS_ANTES = 3;
+
+// Verifies a reCAPTCHA token against Google's siteverify endpoint. A SILENT
+// PASS-THROUGH (returns true without checking anything) when
+// RECAPTCHA_SECRET_KEY is not set in Script Properties — same config-gated,
+// no-op-until-configured pattern as Firebase push/WhatsApp elsewhere in this
+// file, so pasting this code changes nothing until the key is actually set.
+// ⚠️ Not safe to publicize self-service signup anywhere until it IS set —
+// without it, this endpoint has no bot protection at all beyond the e-mail
+// cooldown. See CLAUDE.md.
+function verificarCaptcha_(deps, token) {
+  if (!deps.recaptcha) return true;
+  return deps.recaptcha.verificar(token);
+}
+
+function recaptchaSecreta_() {
+  return PropertiesService.getScriptProperties().getProperty("RECAPTCHA_SECRET_KEY") || "";
+}
+
+function verificarCaptchaReal_(token, secreta) {
+  if (!token || typeof token !== "string") return false;
+  try {
+    const resposta = UrlFetchApp.fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "post",
+      payload: { secret: secreta, response: token },
+      muteHttpExceptions: true,
+    });
+    const dados = JSON.parse(resposta.getContentText());
+    return dados.success === true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
+function acaoSignupRequestCode_(deps, body) {
+  const email = limparEmail_(body.email);
+  const canon = canonEmail_(email);
+  if (!emailValido_(email)) throw new GatewayError_(400, "Informe um e-mail válido.");
+  const nomeEmpresa = cleanText_(body.nomeEmpresa, 80, false);
+  if (!nomeEmpresa) throw new GatewayError_(400, "Informe o nome da empresa.");
+  const nomeResponsavel = cleanText_(body.nomeResponsavel, 80, false);
+  if (!nomeResponsavel) throw new GatewayError_(400, "Informe o seu nome.");
+  if (body.segmento !== undefined && (typeof body.segmento !== "string" || !Object.prototype.hasOwnProperty.call(SEGMENTOS, body.segmento))) {
+    throw new GatewayError_(400, "Segmento inválido.");
+  }
+  const segmento = segmentoValido_(body.segmento);
+  if (!verificarCaptcha_(deps, body.captchaToken)) {
+    throw new GatewayError_(400, "Não foi possível confirmar que você não é um robô. Tente novamente.");
+  }
+
+  return deps.lock(() => {
+    limitarEmails_(deps, canon); // same per-address cooldown/window/global cap as every other public mail-sending action
+    const known = companyMap_(deps);
+    const ids = Object.keys(known);
+    if (ids.length >= MAX_COMPANIES) throw new GatewayError_(400, "No momento não estamos aceitando novos cadastros. Fale com a gente.");
+    if (ids.some((id) => String(known[id].empresa).trim().toLowerCase() === nomeEmpresa.toLowerCase())) {
+      throw new GatewayError_(400, "Já existe uma empresa com esse nome.");
+    }
+
+    const secrets = deps.secrets.get();
+    const codigo = gerarCodigo_(deps);
+    const pendente = {
+      email: email,
+      nomeEmpresa: nomeEmpresa,
+      nomeResponsavel: nomeResponsavel,
+      segmento: segmento,
+      codigoHash: hashDoCodigo_(secrets, canon, codigo),
+      expira: deps.now() + SIGNUP_CODE_MS,
+      tentativas: 0,
+    };
+    deps.cache.put("signup_" + canon, JSON.stringify(pendente), Math.ceil(SIGNUP_CODE_MS / 1000));
+    const enviado = enviarEmailSeguro_(
+      deps,
+      email,
+      "Finan.: seu código de confirmação",
+      "Olá, " + nomeResponsavel + "!\n\nSeu código de confirmação para criar a empresa \"" + nomeEmpresa + "\" no Finan. é: " + codigo + "\n\nEle vale por 15 minutos.\n\nSe você não pediu este cadastro, ignore esta mensagem.\n"
+    );
+    if (!enviado) throw new GatewayError_(503, "Não foi possível enviar o e-mail agora. Tente de novo em alguns minutos.");
+    return { enviado: true };
+  });
+}
+
+function acaoSignupConfirmar_(deps, body) {
+  const canon = canonEmail_(limparEmail_(body.email));
+  const codigo = codigoDeSeisDigitos_(body.codigo);
+  const falha = () => new GatewayError_(400, "Código incorreto ou expirado. Peça um novo.");
+
+  return deps.lock(() => {
+    const guardado = deps.cache.get("signup_" + canon);
+    if (!guardado) throw falha();
+    const pendente = JSON.parse(guardado);
+    if (deps.now() > pendente.expira || pendente.tentativas >= SIGNUP_MAX_TENTATIVAS) {
+      deps.cache.remove("signup_" + canon);
+      throw falha();
+    }
+    const secrets = deps.secrets.get();
+    if (!iguaisEmTempoConstante_(hashDoCodigo_(secrets, canon, codigo), pendente.codigoHash)) {
+      pendente.tentativas += 1;
+      const restanteMs = Math.max(1000, pendente.expira - deps.now());
+      deps.cache.put("signup_" + canon, JSON.stringify(pendente), Math.ceil(restanteMs / 1000));
+      throw falha();
+    }
+    deps.cache.remove("signup_" + canon);
+
+    // Re-check right before creating: time has passed since the request step.
+    const known = companyMap_(deps);
+    const ids = Object.keys(known);
+    if (ids.length >= MAX_COMPANIES) throw new GatewayError_(400, "No momento não estamos aceitando novos cadastros. Fale com a gente.");
+    if (ids.some((id) => String(known[id].empresa).trim().toLowerCase() === pendente.nomeEmpresa.toLowerCase())) {
+      throw new GatewayError_(400, "Já existe uma empresa com esse nome.");
+    }
+
+    const spreadsheetId = deps.sheets.createCompanySpreadsheet(pendente.nomeEmpresa + " — Finan.", pendente.nomeEmpresa, pendente.segmento);
+    deps.sheets.updateValues(spreadsheetId, USUARIOS_TAB + "!A2:C2", [[pendente.email, pendente.nomeResponsavel, ROLE_MASTER]]);
+    const testeExpiraEm = hojeSerial_(deps) + SIGNUP_TRIAL_DIAS;
+    deps.registry.add({ spreadsheetId: spreadsheetId, empresa: pendente.nomeEmpresa, criadaPor: pendente.email, segmento: pendente.segmento, testeExpiraEm: testeExpiraEm });
+    deps.cache.remove("usr_" + spreadsheetId);
+    reindexarEmpresaUsuarios_(deps, spreadsheetId);
+    enviarEmailSeguro_(
+      deps,
+      pendente.email,
+      "Finan.: sua empresa foi criada!",
+      "Olá, " + pendente.nomeResponsavel + "!\n\nA empresa \"" + pendente.nomeEmpresa + "\" foi criada no Finan. Você tem 14 dias grátis para testar — entre em " + deps.config.APP_URL + " com este mesmo e-mail (" + pendente.email + ") para começar.\n"
+    );
+    return { spreadsheetId: spreadsheetId, empresa: pendente.nomeEmpresa, segmento: pendente.segmento, testeExpiraEm: testeExpiraEm };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Trial expiry — the other half of making self-service signup safe: without
+// this, "14 dias grátis" would just be an unlimited free company forever.
+// Checked once a day (instalarGatilhoTrials below), same pattern as every
+// other daily job in this file (lembretes, cota de e-mail, índice de
+// e-mails). Sends exactly two reminders per trial (at 3 days left and on the
+// last day — the exact two points the user asked for, not a reminder every
+// day of the last 3) plus one "encerrado" notice the day it actually
+// deactivates; dedup via the registry's own "Aviso de teste enviado em"
+// column, same reasoning as the Contas a Pagar/Receber reminder's "Avisado
+// em" (a cache key would not survive a whole day; CacheService's own max TTL
+// is 6h).
+// ---------------------------------------------------------------------------
+
+function avisarDonoTrial_(deps, empresaRegistro, tipo, diasRestantes) {
+  let masters;
+  try {
+    masters = (loadUsuarios_(deps, empresaRegistro.spreadsheetId) || []).filter((u) => u.perfil === ROLE_MASTER);
+  } catch (err) {
+    masters = [];
+  }
+  if (!masters.length) return;
+  const assunto =
+    tipo === "ultimoDia"
+      ? "Finan.: seu teste grátis termina hoje — " + empresaRegistro.empresa
+      : tipo === "tresDias"
+      ? "Finan.: faltam " + diasRestantes + " dias do seu teste grátis — " + empresaRegistro.empresa
+      : "Finan.: seu teste grátis terminou — " + empresaRegistro.empresa;
+  const corpo =
+    tipo === "encerrado"
+      ? "Olá!\n\nO período de teste grátis da empresa \"" + empresaRegistro.empresa + "\" terminou e o acesso foi temporariamente desativado. Os dados continuam guardados — fale com a gente para continuar usando o Finan.\n"
+      : "Olá!\n\nFaltam " + diasRestantes + " dia(s) para o fim do teste grátis da empresa \"" + empresaRegistro.empresa + "\". Fale com a gente para continuar usando o Finan. sem interrupção.\n";
+  masters.forEach((m) => enviarEmailSeguro_(deps, m.email, assunto, corpo));
+}
+
+function executarVerificacaoTrials_(deps) {
+  const hoje = hojeSerial_(deps);
+  const empresas = deps.registry && deps.registry.listAll ? deps.registry.listAll() : [];
+  let desativadas = 0;
+  let avisadas = 0;
+  empresas.forEach((e) => {
+    if (e.ativa === false) return; // already deactivated — nothing to do
+    if (!e.testeExpiraEm) return; // not a trial (admin-created, or never on one)
+    if (hoje > e.testeExpiraEm) {
+      deps.registry.setActive(e.spreadsheetId, false);
+      desativadas += 1;
+      avisarDonoTrial_(deps, e, "encerrado");
+      return;
+    }
+    const diasRestantes = e.testeExpiraEm - hoje;
+    if (diasRestantes === SIGNUP_AVISO_DIAS_ANTES || diasRestantes === 0) {
+      if (e.avisoTesteEm === hoje) return; // already warned today (trigger ran twice, safety)
+      avisarDonoTrial_(deps, e, diasRestantes === 0 ? "ultimoDia" : "tresDias", diasRestantes);
+      if (deps.registry.marcarAvisoTeste) deps.registry.marcarAvisoTeste(e.spreadsheetId, hoje);
+      avisadas += 1;
+    }
+  });
+  return { desativadas: desativadas, avisadas: avisadas };
+}
+
+function verificarTrialsTodasEmpresasAgendado() {
+  const deps = realDeps_();
+  const resultado = executarVerificacaoTrials_(deps);
+  console.log("Trials: " + resultado.desativadas + " desativada(s), " + resultado.avisadas + " avisada(s).");
+}
+
+function instalarGatilhoTrials() {
+  ScriptApp.getProjectTriggers().forEach((t) => {
+    if (t.getHandlerFunction() === "verificarTrialsTodasEmpresasAgendado") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("verificarTrialsTodasEmpresasAgendado").timeBased().everyDays(1).atHour(8).create();
+  console.log("Gatilho diário instalado: verificarTrialsTodasEmpresasAgendado, por volta das 8h.");
 }
 
 function acaoPwEsqueci_(deps, body) {
@@ -2233,7 +2496,7 @@ function pushTokensDeps_(cache) {
     if (!id) {
       const criada = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
       id = criada.spreadsheetId;
-      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento", "Teste expira em", "Aviso de teste enviado em"]] }, id, "Empresas!A1:H1", { valueInputOption: "RAW" });
       props.setProperty(REGISTRY_PROP, id);
     }
     const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
@@ -2352,7 +2615,7 @@ function indiceEmailsDeps_(cache) {
     if (!id) {
       const criada = Sheets.Spreadsheets.create({ properties: { title: REGISTRY_TITLE }, sheets: [{ properties: { title: "Empresas" } }] });
       id = criada.spreadsheetId;
-      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento"]] }, id, "Empresas!A1:F1", { valueInputOption: "RAW" });
+      Sheets.Spreadsheets.Values.update({ values: [["ID da planilha", "Empresa", "Criada em", "Criada por", "Ativa", "Segmento", "Teste expira em", "Aviso de teste enviado em"]] }, id, "Empresas!A1:H1", { valueInputOption: "RAW" });
       props.setProperty(REGISTRY_PROP, id);
     }
     const titulos = (Sheets.Spreadsheets.get(id, { fields: "sheets.properties.title" }).sheets || []).map((x) => x.properties.title);
