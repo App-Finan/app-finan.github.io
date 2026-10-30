@@ -24,10 +24,28 @@ function parseInputDate(value, endOfDay) {
   return new Date(`${value}T${endOfDay ? "23:59:59" : "00:00:00"}Z`);
 }
 
+// Monday of the week containing `date` — the Brazilian/ISO convention
+// (segunda a domingo), matching the weekly-close use case this preset exists
+// for (requested specifically for that: "o fechamento semanal").
+function mondayOfWeekUTC(date) {
+  const dow = date.getUTCDay(); // 0 = domingo .. 6 = sábado
+  const diasDesdeSegunda = dow === 0 ? 6 : dow - 1;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - diasDesdeSegunda));
+}
+
 function computePresetRange(preset, records) {
   const today = new Date();
   const now = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
   switch (preset) {
+    case "semana-atual": {
+      const monday = mondayOfWeekUTC(now);
+      return { start: monday, end: new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6)) };
+    }
+    case "semana-anterior": {
+      const mondayThisWeek = mondayOfWeekUTC(now);
+      const mondayLastWeek = new Date(Date.UTC(mondayThisWeek.getUTCFullYear(), mondayThisWeek.getUTCMonth(), mondayThisWeek.getUTCDate() - 7));
+      return { start: mondayLastWeek, end: new Date(Date.UTC(mondayLastWeek.getUTCFullYear(), mondayLastWeek.getUTCMonth(), mondayLastWeek.getUTCDate() + 6)) };
+    }
     case "mes-atual":
       return { start: startOfMonthUTC(now), end: endOfMonthUTC(now) };
     case "mes-anterior": {
