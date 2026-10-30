@@ -278,6 +278,7 @@ async function refreshAllData() {
   btn.textContent = "Atualizando…";
   statusMessage.textContent = "Atualizando...";
   const errors = [];
+  ultimaAutoCorrecaoAbas = []; // começa um aviso novo, não repete um de antes
 
   try {
     await refreshLancamentosAndDashboard();
@@ -343,8 +344,10 @@ async function refreshAllData() {
     }
   }
 
+  const avisoAutoCorrecao = mensagemAutoCorrecaoAbas();
   statusMessage.textContent =
-    errors.length > 0 ? `Atualizado com erros — ${errors.join(" | ")}` : "Dados atualizados.";
+    (errors.length > 0 ? `Atualizado com erros — ${errors.join(" | ")}` : "Dados atualizados.") +
+    (avisoAutoCorrecao ? ` ${avisoAutoCorrecao}` : "");
   btn.disabled = false;
   btn.textContent = originalLabel;
 }
@@ -672,8 +675,9 @@ async function startApp(token, nome, perfil, linha) {
     flushQueue();
   }
 
+  const avisoAutoCorrecao = mensagemAutoCorrecaoAbas();
   if (errors.length > 0) {
-    statusMessage.textContent = `Carregado com erros — ${errors.join(" | ")}`;
+    statusMessage.textContent = `Carregado com erros — ${errors.join(" | ")}` + (avisoAutoCorrecao ? ` ${avisoAutoCorrecao}` : "");
   } else if (anyFromCache) {
     // Offline is deliberately silent: just keep showing the cached data.
     statusMessage.textContent = "";
@@ -681,7 +685,8 @@ async function startApp(token, nome, perfil, linha) {
     const ignoradas = ultimoResumoLeitura.lancamentos + ultimoResumoLeitura.estoque;
     statusMessage.textContent =
       `${lancResult.value.data.length} lançamentos e ${estoqueResult.value.data.length} ${vocab("carregados")}.` +
-      (ignoradas > 0 ? ` ${ignoradas} linha(s) da planilha não puderam ser lidas (sem data ou sem produto) e foram ignoradas.` : "");
+      (ignoradas > 0 ? ` ${ignoradas} linha(s) da planilha não puderam ser lidas (sem data ou sem produto) e foram ignoradas.` : "") +
+      (avisoAutoCorrecao ? ` ${avisoAutoCorrecao}` : "");
   }
 }
 

@@ -20,6 +20,11 @@ const ABAS_LISTAS_PADRAO = {
 
 let abasConfiguradas = {};
 let esquemasEmMemoria = {};
+// Preenchido por tentarAutoCorrigirAba quando ela acha e grava sozinha uma
+// aba renomeada (ex.: "Lançamento" -> "Lançamento geral"). Zerado no início
+// de cada carregamento (resetarAbasDaEmpresa) para nunca mostrar um aviso de
+// uma correção de uma sessão/empresa anterior.
+let ultimaAutoCorrecaoAbas = [];
 
 function chaveArmazenamento(nome) {
   return `financegold_${nome}_${CONFIG.SPREADSHEET_ID}`;
@@ -39,6 +44,7 @@ function intervaloAba(nome, celulas) {
 function resetarAbasDaEmpresa() {
   abasConfiguradas = {};
   esquemasEmMemoria = {};
+  ultimaAutoCorrecaoAbas = [];
 }
 
 // Reads the "Configuração" tab (papel, aba). A company without it uses the
@@ -93,6 +99,31 @@ async function lerLinhasDaAba(papel, token) {
       titulos = null;
     }
     if (titulos && titulos.indexOf(aba) === -1) {
+      // Auto-correção (2026-10-30): a aba esperada ("Lançamento"/"Estoque")
+      // sumiu — provavelmente foi renomeada, não apagada. Só um Master pode
+      // tentar: é o único perfil que o servidor deixa listar/ler QUALQUER
+      // aba (actionGetValues_ no Code.gs) — para Editor/Visualizador, nem
+      // vale tentar, cairia num 403 na hora. Reusa o mesmo motor de
+      // classificação por nome+conteúdo que "Ajustes → Conectar planilha"
+      // já usa manualmente (classificarAba, js/esquema.js) — só que aqui
+      // automático, e só quando há exatamente UM candidato confiante (dois
+      // candidatos, ou um nome parecido cujo conteúdo não bate, caem no erro
+      // de sempre em vez de arriscar escrever na aba errada).
+      if (isMaster(currentUserRole) && (papel === "lancamentos" || papel === "estoque") && titulos) {
+        let detectado = null;
+        try {
+          detectado = await tentarAutoCorrigirAba(papel, titulos, token);
+        } catch (e) {
+          if (e && e.sessionExpired) throw e;
+          detectado = null; // qualquer outro problema na tentativa: cai no erro normal abaixo
+        }
+        if (detectado) {
+          ultimaAutoCorrecaoAbas.push({ papel: papel, nomeAntigo: aba, nomeNovo: detectado });
+          return await fetchSheetValues(CONFIG.SPREADSHEET_ID, intervaloAba(detectado, "A1:BZ"), token, {
+            valueRenderOption: "UNFORMATTED_VALUE",
+          });
+        }
+      }
       const oque = papel === "lancamentos" ? "o fluxo de caixa" : "o estoque";
       const dica = isMaster(currentUserRole)
         ? `Abra Ajustes → Conectar planilha e escolha qual aba é ${oque}.`
@@ -101,6 +132,95 @@ async function lerLinhasDaAba(papel, token) {
     }
     throw err;
   }
+}
+
+// Procura, entre as abas reais da planilha, uma única candidata confiante
+// para o papel que sumiu — por nome (substring, ex. "lançamento" dentro de
+// "lançamento geral") e, só pra confirmar, pelo conteúdo real das colunas
+// (mesmo teste de classificarAba que "Conectar planilha" usa). Nunca chuta:
+// zero ou mais de um candidato confirmado -> retorna null, sem gravar nada.
+async function tentarAutoCorrigirAba(papel, titulos, token) {
+  const reservadas = [ABA_CONFIG, "Usuários", "Configuração Fiscal"];
+  const outroPapel = papel === "lancamentos" ? "estoque" : "lancamentos";
+  const jaUsadas = [nomeAba(outroPapel)].concat(Object.keys(ABAS_LISTAS_PADRAO).map((k) => nomeAba(k)));
+  const candidatosPorNome = titulos.filter((t) => {
+    if (reservadas.indexOf(t) !== -1 || jaUsadas.indexOf(t) !== -1) return false;
+    const nome = normalizarTexto(t);
+    return NOMES_ABA[papel].some((n) => nome.indexOf(n) !== -1);
+  });
+  if (candidatosPorNome.length === 0) return null;
+
+  const confirmados = [];
+  for (let i = 0; i < candidatosPorNome.length; i += 1) {
+    const nome = candidatosPorNome[i];
+    let rows = [];
+    try {
+      rows = await fetchSheetValues(CONFIG.SPREADSHEET_ID, intervaloAba(nome, "A1:BZ60"), token, {
+        valueRenderOption: "UNFORMATTED_VALUE",
+      });
+    } catch (err) {
+      if (err && (err.sessionExpired || isNetworkError(err))) throw err;
+      continue; // não consegui ler essa candidata: ela simplesmente não confirma
+    }
+    const cls = classificarAba(nome, rows);
+    if (cls.papel === papel && cls.nota >= 3) confirmados.push(nome);
+  }
+  if (confirmados.length !== 1) return null;
+
+  const nomeDetectado = confirmados[0];
+  try {
+    await salvarAutoCorrecaoAba(papel, nomeDetectado, token);
+  } catch (err) {
+    if (err && err.sessionExpired) throw err;
+    // Não consegui gravar (rede, corrida com outra aba sendo corrigida ao
+    // mesmo tempo) — ainda assim uso a detecção só para este carregamento,
+    // em vez de voltar ao erro antigo; na próxima vez tenta gravar de novo.
+    abasConfiguradas[papel] = nomeDetectado;
+  }
+  return nomeDetectado;
+}
+
+// Grava só o papel detectado na aba Configuração, sem mexer em nenhuma outra
+// linha já existente (ao contrário de salvarConexao em js/conectar.js, que
+// reescreve a aba inteira a partir de uma varredura manual completa) — aqui
+// só o papel que estava faltando é tocado.
+async function salvarAutoCorrecaoAba(papel, nomeDaAba, token) {
+  const existentes = {};
+  try {
+    const rows = await fetchSheetValues(CONFIG.SPREADSHEET_ID, intervaloAba(ABA_CONFIG, "A2:C"), token, {
+      valueRenderOption: "UNFORMATTED_VALUE",
+    });
+    rows.forEach((row) => {
+      const p = typeof row[0] === "string" ? row[0].trim() : "";
+      const a = typeof row[1] === "string" ? row[1].trim() : "";
+      if (p && a) existentes[p] = a;
+    });
+  } catch (err) {
+    if (err && (err.sessionExpired || isNetworkError(err))) throw err;
+    await createSheetTab(CONFIG.SPREADSHEET_ID, ABA_CONFIG, token); // aba Configuração ainda não existe
+  }
+  existentes[papel] = nomeDaAba;
+  await updateSheetRow(CONFIG.SPREADSHEET_ID, intervaloAba(ABA_CONFIG, "A1:B1"), ["Papel", "Aba"], token);
+  const linhas = Object.keys(existentes).map((p) => [p, existentes[p]]);
+  for (let i = 0; i < linhas.length; i += 1) {
+    await updateSheetRow(CONFIG.SPREADSHEET_ID, intervaloAba(ABA_CONFIG, `A${i + 2}:B${i + 2}`), linhas[i], token);
+  }
+  abasConfiguradas = existentes;
+  try {
+    localStorage.setItem(chaveArmazenamento("abas"), JSON.stringify(existentes));
+  } catch (e) {
+    // best effort
+  }
+}
+
+// Texto para o status de carregamento — "" se nada foi auto-corrigido.
+function mensagemAutoCorrecaoAbas() {
+  if (ultimaAutoCorrecaoAbas.length === 0) return "";
+  const partes = ultimaAutoCorrecaoAbas.map((c) => {
+    const oque = c.papel === "lancamentos" ? "o fluxo de caixa" : "o estoque";
+    return `conectamos "${c.nomeNovo}" automaticamente como ${oque} (antes "${c.nomeAntigo}")`;
+  });
+  return `Aviso: ${partes.join("; ")}. Confira em Ajustes → Conectar planilha se não for isso.`;
 }
 
 function temListasConectadas() {
