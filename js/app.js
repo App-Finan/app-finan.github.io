@@ -332,7 +332,7 @@ async function refreshAllData() {
     errors.push(`Extrato Bancário: ${err.message}`);
   }
 
-  renderContasResumoDashboard(allContas.pagar, allContas.receber);
+  renderContasResumoDashboard(allContas.pagar, allContas.receber, allEstoque);
 
   if (isMaster(currentUserRole)) {
     try {
@@ -624,11 +624,13 @@ async function startApp(token, nome, perfil, linha) {
     errors.push(`Extrato Bancário: ${extratoResult.reason.message}`);
   }
 
-  // Dashboard's own small "Contas a Pagar"/"Contas a Receber" numbers — shown
-  // even if only one of the two loaded (the other side just reads 0).
+  // Dashboard's own small "Contas a Pagar"/"Contas a Receber"/"Valor em
+  // estoque" numbers — shown even if only some of the three loaded (the
+  // others just read 0).
   renderContasResumoDashboard(
     contasPagarResult.status === "fulfilled" ? contasPagarResult.value.data : [],
-    contasReceberResult.status === "fulfilled" ? contasReceberResult.value.data : []
+    contasReceberResult.status === "fulfilled" ? contasReceberResult.value.data : [],
+    estoqueResult.status === "fulfilled" ? estoqueResult.value.data : []
   );
 
   // Avisos de vencimento (gateway mode only — sending e-mail needs Apps

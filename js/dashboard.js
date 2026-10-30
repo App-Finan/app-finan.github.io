@@ -128,7 +128,7 @@ function buildSparkline(values, filled) {
   return svg;
 }
 
-function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, trend, hero, invertTrendColor, spark, wide }) {
+function buildKpiTile({ label, labelExtra, value, subValue, subValueLabel, subValueDanger, icon, iconClass, trend, hero, invertTrendColor, spark, wide }) {
   const tile = document.createElement("div");
   tile.className = `stat-tile${hero ? " stat-tile-hero" : ""}${wide ? " stat-tile-wide" : ""}`;
 
@@ -169,15 +169,18 @@ function buildKpiTile({ label, labelExtra, value, subValue, icon, iconClass, tre
   // A second, smaller line under the main value for a related R$ figure
   // (2026-10-11: the gold-weight tiles show grams, but not what that gold
   // actually cost/brought in — requested as "together with the grams, just
-  // on another line" rather than a whole separate KPI tile).
+  // on another line" rather than a whole separate KPI tile). subValueLabel/
+  // subValueDanger (2026-10-30) generalize this for the Contas a Pagar/
+  // Receber tiles' "Atrasado" breakdown — every existing caller omits both,
+  // so they keep getting the original "Valor"/accent-color look unchanged.
   if (subValue) {
     const subEl = document.createElement("div");
     subEl.className = "stat-subvalue";
     const subLabelEl = document.createElement("span");
     subLabelEl.className = "stat-subvalue-label";
-    subLabelEl.textContent = "Valor";
+    subLabelEl.textContent = subValueLabel || "Valor";
     const subAmountEl = document.createElement("span");
-    subAmountEl.className = "stat-subvalue-amount";
+    subAmountEl.className = `stat-subvalue-amount${subValueDanger ? " stat-subvalue-amount-danger" : ""}`;
     subAmountEl.textContent = subValue;
     subEl.appendChild(subLabelEl);
     subEl.appendChild(subAmountEl);
@@ -288,31 +291,69 @@ function renderKpis(records, prevRecords, series) {
   );
 }
 
-// "Contas a Pagar"/"Contas a Receber", as plain numbers next to Entradas/
-// Saídas (requested 2026-10-11) — reuses the exact .conta-kpi card the Contas
-// a Pagar/Receber screens already use for their own "Pendente" stat, rather
-// than the heavier KPI-tile system (icon/trend/sparkline) those screens'
-// numbers don't have either. Deliberately NOT scoped to the dashboard's date
-// filter: unlike a period's entradas/saídas, "what's currently owed" has no
-// period of its own, so this renders once when the data loads/refreshes, not
-// on every filter change renderDashboardCharts triggers.
-function renderContasResumoDashboard(pagarItems, receberItems) {
+// "Contas a Pagar"/"Contas a Receber"/"Valor em estoque", as plain numbers
+// next to Entradas/Saídas (Contas requested 2026-10-11; estoque added
+// 2026-10-30 after a sweep found it was real, already-loaded data with no
+// summary anywhere in the app, not even Estoque's own list screen) — reuses
+// the exact .conta-kpi card the Contas a Pagar/Receber screens already use
+// for their own "Pendente" stat, rather than the heavier KPI-tile system
+// (icon/trend/sparkline) those screens' numbers don't have either.
+// Deliberately NOT scoped to the dashboard's date filter: unlike a period's
+// entradas/saídas, "what's currently owed" or "what's sitting in stock right
+// now" has no period of its own, so this renders once when the data loads/
+// refreshes, not on every filter change renderDashboardCharts triggers.
+function renderContasResumoDashboard(pagarItems, receberItems, estoqueItems) {
   const host = document.getElementById("dashboard-contas-kpis");
   if (!host) return;
   host.innerHTML = "";
   const somarPendente = (items) =>
     (items || []).reduce((acc, i) => acc + (i.status === CONTAS_CONFIG[i.tipo].statusAberto ? i.valor || 0 : 0), 0);
+  // "Atrasadas" (2026-10-30): reuses ehContaAtrasada (js/contas.js) — the
+  // exact same function the Contas a Pagar/Receber screens' own KPI strip
+  // already computes this with — so a Master doesn't have to leave the
+  // Dashboard to notice something overdue. Only shown as a subValue when
+  // there IS an overdue amount (subValue is falsy/omitted otherwise, same
+  // "no subValue line at all" behavior every other buildKpiTile call gets
+  // when it has nothing to show).
+  const somarAtrasadas = (items) => (items || []).reduce((acc, i) => acc + (ehContaAtrasada(i) ? i.valor || 0 : 0), 0);
   // Same buildKpiTile the other tiles use (2026-10-11: the lighter .conta-kpi
   // card — same one Contas a Pagar/Receber's own list screens use — looked
   // visually empty/small next to the full-size tiles above it). No
   // trend/spark/art, so it stays "só números" as asked; the icon alone
   // (mirroring Entradas=up/success, Saídas=down/danger) is enough to fill a
   // normal .stat-tile's height without inventing fake trend data.
+  const atrasadasPagar = somarAtrasadas(pagarItems);
+  const atrasadasReceber = somarAtrasadas(receberItems);
   host.appendChild(
-    buildKpiTile({ label: "Contas a Pagar", value: formatBRL(somarPendente(pagarItems)), icon: KPI_ICONS.down, iconClass: "danger" })
+    buildKpiTile({
+      label: "Contas a Pagar",
+      value: formatBRL(somarPendente(pagarItems)),
+      subValue: atrasadasPagar > 0 ? formatBRL(atrasadasPagar) : null,
+      subValueLabel: "Atrasado",
+      subValueDanger: true,
+      icon: KPI_ICONS.down,
+      iconClass: "danger",
+    })
   );
   host.appendChild(
-    buildKpiTile({ label: "Contas a Receber", value: formatBRL(somarPendente(receberItems)), icon: KPI_ICONS.up, iconClass: "success" })
+    buildKpiTile({
+      label: "Contas a Receber",
+      value: formatBRL(somarPendente(receberItems)),
+      subValue: atrasadasReceber > 0 ? formatBRL(atrasadasReceber) : null,
+      subValueLabel: "Atrasado",
+      subValueDanger: true,
+      icon: KPI_ICONS.up,
+      iconClass: "success",
+    })
+  );
+  // Soma de valorCusto das peças ainda não vendidas — typeof check porque
+  // uma célula de custo em branco vira null (converterNumero, js/esquema.js),
+  // nunca 0, o mesmo cuidado já usado para peso/quantidade em computeKpis.
+  const valorEstoque = (estoqueItems || [])
+    .filter((item) => !item.vendido)
+    .reduce((acc, item) => acc + (typeof item.valorCusto === "number" ? item.valorCusto : 0), 0);
+  host.appendChild(
+    buildKpiTile({ label: "Valor em estoque", value: formatBRL(valorEstoque), icon: KPI_ICONS.scale, iconClass: "neutral" })
   );
 }
 

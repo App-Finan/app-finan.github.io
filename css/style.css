@@ -1390,11 +1390,11 @@ td select {
   grid-column: span 6;
 }
 
-/* Contas a Pagar/Receber (2026-10-11): two plain-number tiles, no art/spark —
-   half-width each so the pair fills the row exactly like Compras/Vendas de
-   ouro above, instead of the default span-3 leaving half the row empty. */
+/* Contas a Pagar/Receber (2026-10-11) + Valor em estoque (2026-10-30): three
+   plain-number tiles, no art/spark — a third each so they fill the row
+   exactly, instead of the default span-3 leaving a third of it empty. */
 #dashboard-contas-kpis .stat-tile {
-  grid-column: span 6;
+  grid-column: span 4;
 }
 
 .stat-tile > *:not(.stat-art):not(.stat-spark-slot) {
@@ -1516,6 +1516,10 @@ td select {
   font-weight: 700;
   color: var(--color-accent-text);
   white-space: nowrap;
+}
+
+.stat-subvalue-amount-danger {
+  color: var(--color-danger);
 }
 
 .stat-trend {
