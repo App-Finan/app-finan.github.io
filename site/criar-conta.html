@@ -110,11 +110,28 @@ input:focus,select:focus{outline:2px solid #2563c9;outline-offset:1px}
 // self-service"). Este arquivo é autocontido de propósito — não carrega o
 // resto do app, só fala com o mesmo CONFIG.GATEWAY_URL que ele usa.
 
-// reCAPTCHA: vazio até existir uma chave real (Script Property
-// RECAPTCHA_SITE_KEY no servidor tem a contraparte secreta) — com isso em
-// branco, o formulário funciona normalmente, só sem a camada de robô; ver a
-// nota em verificarCaptcha_ no Code.gs.
+// reCAPTCHA: vazio até existir uma chave real (a chave pública vai aqui; a
+// contraparte secreta é a Script Property RECAPTCHA_SECRET_KEY no servidor)
+// — com isso em branco, o formulário funciona normalmente, só sem a camada
+// de robô; ver a nota em verificarCaptcha_ no Code.gs.
 const RECAPTCHA_SITE_KEY = "";
+
+// A biblioteca do reCAPTCHA v3 só é carregada quando há uma chave de verdade
+// — um <script src> fixo aqui não faria nada útil com a chave em branco, e
+// carregar sempre faria esta página (deliberadamente autocontida, sem o
+// resto do app) falar com o Google mesmo antes de qualquer configuração.
+// Sem isso, window.grecaptcha nunca existiria e o token enviado seria sempre
+// vazio — inofensivo hoje (o servidor também não checa nada ainda), mas no
+// instante em que RECAPTCHA_SECRET_KEY for configurada no servidor, um token
+// sempre vazio faria TODO cadastro ser recusado como "robô".
+const recaptchaPronto = RECAPTCHA_SITE_KEY
+  ? new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://www.google.com/recaptcha/api.js?render=" + encodeURIComponent(RECAPTCHA_SITE_KEY);
+      script.onload = () => window.grecaptcha.ready(resolve);
+      document.head.appendChild(script);
+    })
+  : Promise.resolve();
 
 let emailPendente = "";
 
@@ -163,6 +180,7 @@ document.getElementById("form-dados").addEventListener("submit", async (event) =
   botao.disabled = true;
   botao.textContent = "Enviando...";
   try {
+    await recaptchaPronto;
     const captchaToken = window.grecaptcha && RECAPTCHA_SITE_KEY ? await grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: "signup" }) : "";
     await chamarGateway("signupRequestCode", { nomeEmpresa: nomeEmpresa, segmento: segmento, nomeResponsavel: nomeResponsavel, email: email, captchaToken: captchaToken });
     emailPendente = email;
