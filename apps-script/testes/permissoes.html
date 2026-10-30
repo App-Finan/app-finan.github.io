@@ -227,6 +227,7 @@ run("a name that already exists (case-insensitive) is refused", "admin", { actio
   results.push((meAdm2.data.companies.some((c) => c.spreadsheetId === IPA && c.segmento === (GATEWAY_CONFIG.SPREADSHEETS[IPA].segmento || SEGMENTO_PADRAO)) ? "PASS" : "FAIL") + " fixed companies report their segment (or the default)");
   const list = step("admin", { action: "listCompanies" });
   results.push((list.ok && list.data.empresas.some((e) => e.empresa === "Pet Feliz" && e.segmento === "petshop") ? "PASS" : "FAIL") + " listCompanies shows each company's segment");
+  results.push((list.data.empresas.filter((e) => e.spreadsheetId === IPA)[0].testeExpiraEm === null && list.data.empresas.filter((e) => e.empresa === "Pet Feliz")[0].testeExpiraEm === null ? "PASS" : "FAIL") + " listCompanies reports testeExpiraEm: null for a fixed company and one created through the admin-only Painel do sistema path (no trial clock)");
   ["hacker", 5, {}, ["petshop"], "__proto__", "toString"].forEach((bad) => {
     const r = step("admin", { action: "createCompany", nome: "Ruim " + String(Math.random()), ownerEmail: "b@x.com", ownerNome: "B", segmento: bad });
     results.push((!r.ok && r.status === 400 ? "PASS" : "FAIL") + " invalid segment " + JSON.stringify(bad) + " is refused");
@@ -1514,6 +1515,9 @@ run("addTab still refuses an arbitrary title, ERP or not", "mas", u({ action: "a
     const registro = state.__registry.filter((e) => e.spreadsheetId === r2.data.spreadsheetId)[0];
     T(registro && registro.testeExpiraEm === hojeSerial_({ now: () => state.__agora }) + SIGNUP_TRIAL_DIAS, "…a 14-day trial is recorded in the registry");
     T(state.__indice.some((l) => l.email === "dona@x.com" && l.spreadsheetId === r2.data.spreadsheetId), "…and the founding Master is indexed immediately (reuses reindexarEmpresaUsuarios_)");
+    const listados = chamar(state, { token: "admin", action: "listCompanies" });
+    const entradaListada = listados.ok && listados.data.empresas.filter((e) => e.spreadsheetId === r2.data.spreadsheetId)[0];
+    T(entradaListada && entradaListada.testeExpiraEm === registro.testeExpiraEm, "…listCompanies surfaces this same trial expiry date to the system admin (the metrics panel's data source)");
   }
 
   // wrong code / expired code / too many tries

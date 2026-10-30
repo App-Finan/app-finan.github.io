@@ -1082,12 +1082,12 @@ function actionListCompanies_(deps, email) {
   const fixed = deps.config.SPREADSHEETS;
   const entries = {};
   Object.keys(fixed).forEach((id) => {
-    entries[id] = { empresa: fixed[id].empresa, segmento: segmentoValido_(fixed[id].segmento), origem: "fixa", ativa: true };
+    entries[id] = { empresa: fixed[id].empresa, segmento: segmentoValido_(fixed[id].segmento), origem: "fixa", ativa: true, testeExpiraEm: null, avisoTesteEm: null };
   });
   const registradas = deps.registry && deps.registry.listAll ? deps.registry.listAll() : [];
   registradas.forEach((c) => {
     if (!Object.prototype.hasOwnProperty.call(entries, c.spreadsheetId)) {
-      entries[c.spreadsheetId] = { empresa: c.empresa, segmento: c.segmento, origem: "criada", ativa: c.ativa };
+      entries[c.spreadsheetId] = { empresa: c.empresa, segmento: c.segmento, origem: "criada", ativa: c.ativa, testeExpiraEm: c.testeExpiraEm, avisoTesteEm: c.avisoTesteEm };
     }
   });
   const out = Object.keys(entries)
@@ -1107,6 +1107,14 @@ function actionListCompanies_(deps, email) {
         segmento: info.segmento,
         origem: info.origem,
         ativa: info.ativa,
+        // null for a "fixa" company or one created through the admin-only
+        // Painel do sistema path (no trial clock at all); a date serial for
+        // one created through self-service signup (see "Cadastro
+        // self-service" in CLAUDE.md) — the client uses this to build the
+        // "em teste grátis" / "teste encerrado" metrics, nothing server-side
+        // changes by exposing it here.
+        testeExpiraEm: info.testeExpiraEm || null,
+        avisoTesteEm: info.avisoTesteEm || null,
         usuarios: list.length,
         masters: list.filter((u) => u.perfil === ROLE_MASTER).map((u) => ({ nome: u.nome, email: u.email })),
       };

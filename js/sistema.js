@@ -30,9 +30,68 @@ async function loadEmpresasSistema() {
     const data = await gatewayCall("listCompanies", {}, accessToken);
     sistemaEmpresas = data.empresas || [];
     renderEmpresasSistema();
+    renderMetricasSistema();
   } catch (err) {
     console.error(err);
     if (!err.sessionExpired) sistemaStatus("sistema-empresas-status", `Não foi possível carregar as empresas: ${mensagemDoErro(err)}`);
+  }
+}
+
+// Days left on a company's trial (testeExpiraEm, a date serial — same epoch
+// sheetSerialToDate already converts, see js/lancamentos.js), or null for a
+// company with no trial clock at all (a "fixa" company, or one created
+// through the admin-only Painel do sistema path — see actionListCompanies_'s
+// own comment in Code.gs for why that distinction exists).
+function diasRestantesTeste(testeExpiraEm) {
+  if (typeof testeExpiraEm !== "number") return null;
+  const data = sheetSerialToDate(testeExpiraEm);
+  if (!data) return null;
+  const hoje = new Date();
+  const hojeUTC = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const alvoUTC = Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
+  return Math.round((alvoUTC - hojeUTC) / 86400000);
+}
+
+// Deliberately only the metrics that have REAL data behind them today: MRR
+// and taxa de conversão (asked for in the original SaaS-roadmap planning —
+// see CLAUDE.md "Virar um SaaS de verdade") need a real paying/not-paying
+// signal that only exists once billing (Fase 3) is built, which is itself
+// blocked on the CNPJ being formalized. Showing a number for either here
+// would be inventing data, not reporting it — the field-hint next to this
+// card says so in the UI instead of a fake "R$ 0,00" tile.
+function renderMetricasSistema() {
+  const container = document.getElementById("sistema-metricas-kpis");
+  if (!container) return;
+  container.innerHTML = "";
+  const ativas = sistemaEmpresas.filter((e) => e.ativa);
+  const inativas = sistemaEmpresas.filter((e) => !e.ativa);
+  const emTeste = ativas.filter((e) => typeof e.testeExpiraEm === "number");
+  const semTeste = ativas.filter((e) => typeof e.testeExpiraEm !== "number");
+  const vencendoEmBreve = emTeste.filter((e) => {
+    const dias = diasRestantesTeste(e.testeExpiraEm);
+    return dias !== null && dias <= 3;
+  });
+
+  // Short labels on purpose — a long phrase here overflows the fixed-width
+  // span-3 tile (the same clipping the dashboard's own KPI tiles have been
+  // fixed for before; see the "A KPI label could wrap mid-phrase" note in
+  // CLAUDE.md). What each short label means lives in the field-hint below
+  // the row instead, which has room to wrap normally.
+  container.appendChild(buildKpiTile({ label: "Empresas", value: String(sistemaEmpresas.length), icon: KPI_ICONS.scale, iconClass: "neutral" }));
+  container.appendChild(buildKpiTile({ label: "Ativas", value: String(ativas.length), icon: KPI_ICONS.up, iconClass: "success" }));
+  container.appendChild(buildKpiTile({ label: "Em teste", value: String(emTeste.length), icon: KPI_ICONS.scale, iconClass: vencendoEmBreve.length ? "danger" : "neutral" }));
+  container.appendChild(buildKpiTile({ label: "Sem teste", value: String(semTeste.length), icon: KPI_ICONS.up, iconClass: "neutral" }));
+  container.appendChild(buildKpiTile({ label: "Inativas", value: String(inativas.length), icon: KPI_ICONS.down, iconClass: inativas.length ? "danger" : "neutral" }));
+
+  const aviso = document.getElementById("sistema-metricas-aviso");
+  if (aviso) {
+    if (vencendoEmBreve.length > 0) {
+      const nomes = vencendoEmBreve.map((e) => e.empresa).join(", ");
+      aviso.textContent = `${vencendoEmBreve.length} empresa(s) em teste grátis vencendo em até 3 dias: ${nomes}.`;
+      aviso.hidden = false;
+    } else {
+      aviso.hidden = true;
+    }
   }
 }
 
