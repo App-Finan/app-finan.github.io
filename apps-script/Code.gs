@@ -350,7 +350,18 @@ function realDeps_() {
     // config-gated pattern as deps.recaptcha above.
     backupEmail: PropertiesService.getScriptProperties().getProperty("BACKUP_EMAIL") || "",
     drive: {
-      exportarXlsx: (spreadsheetId) => DriveApp.getFileById(spreadsheetId).getAs(MimeType.MICROSOFT_EXCEL),
+      // DriveApp.File.getAs() cannot convert a native Google Sheets file to
+      // .xlsx — that only works for already-binary blobs. A Google Workspace
+      // file has to go through its own export endpoint instead, authenticated
+      // with this script's own OAuth token (already carries spreadsheets +
+      // drive.readonly, both sufficient for a GET on one's own file export).
+      exportarXlsx: (spreadsheetId, empresaNome) => {
+        const url = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(spreadsheetId) + "/export?format=xlsx";
+        const response = UrlFetchApp.fetch(url, {
+          headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+        });
+        return response.getBlob().setName((empresaNome || spreadsheetId) + ".xlsx");
+      },
     },
     sheets: {
       // Creates the spreadsheet (owned by whoever deployed this script) with
@@ -2388,7 +2399,7 @@ function executarBackupSemanal_(deps) {
   let falhas = 0;
   Object.keys(empresas).forEach((spreadsheetId) => {
     try {
-      const anexo = deps.drive.exportarXlsx(spreadsheetId);
+      const anexo = deps.drive.exportarXlsx(spreadsheetId, empresas[spreadsheetId].empresa);
       const hoje = new Date(deps.now()).toISOString().slice(0, 10);
       deps.mail.send({
         to: deps.backupEmail,
